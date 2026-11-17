@@ -55,6 +55,7 @@ unsafe impl FrameAllocator<Size4KiB> for CerceveDagitici {
         }
     }
 }
+
 pub fn kullanilabilir_bayt(harita: &MemoryMap) -> u64 {
     kullanilabilir(harita).map(|(bas, son)| son - bas).sum()
 }

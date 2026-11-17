@@ -17,10 +17,12 @@ mod duzenleyici;
 mod fare;
 mod fro;
 mod gdt;
+mod grafik;
 mod interrupts;
 mod kabuk;
 mod klavye;
 mod memory;
+mod pci;
 mod vga;
 
 use bootloader::{BootInfo, entry_point};
@@ -41,6 +43,7 @@ fn cekirdek_main(boot_info: &'static BootInfo) -> ! {
     interrupts::init();
 
     let fiziksel_ofset = VirtAddr::new(boot_info.physical_memory_offset);
+    grafik::ofset_ayarla(boot_info.physical_memory_offset);
     let mut sayfalar = unsafe { memory::init(fiziksel_ofset) };
     let mut cerceveler = unsafe { memory::CerceveDagitici::new(&boot_info.memory_map) };
     allocator::init(&mut sayfalar, &mut cerceveler).expect("heap kurulamadı");

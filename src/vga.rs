@@ -97,7 +97,7 @@ pub fn temizle() {
 }
 
 // Karakterin VGA yazı tipindeki numarası.
-fn karakter_kodu(c: char) -> u8 {
+pub(crate) fn karakter_kodu(c: char) -> u8 {
     match c {
         ' '..='~' => c as u8,
         _ => match TURKCE.iter().find(|(harf, _)| *harf == c) {
@@ -131,22 +131,8 @@ pub fn hucre_yaz(satir: usize, sutun: usize, c: char, renk: u8) {
 
 // Yazı tipi, ekran kartı belleğinin 2. düzleminde (plane 2) durur: her karakter
 // 32 baytlık bir resim, her bayt 8 piksellik bir satır. Normalde oraya erişilemez;
-// birkaç ayarla geçici olarak açıp yeni harfleri çiziyoruz.
-pub fn turkce_harfleri_yukle() {
-    let font = 0xa0000 as *mut u8;
-    let oku = |karakter: u8| {
-        let mut resim = [0u8; 16];
-        for (satir, bayt) in resim.iter_mut().enumerate() {
-            *bayt = unsafe { font.add(karakter as usize * 32 + satir).read_volatile() };
-        }
-        resim
-    };
-    let yaz = |yuva: u8, resim: [u8; 16]| {
-        for (satir, bayt) in resim.iter().enumerate() {
-            unsafe { font.add(yuva as usize * 32 + satir).write_volatile(*bayt) };
-        }
-    };
-
+// birkaç ayarla geçici olarak açıp `islem`i çalıştırır, sonra ayarları geri alırız.
+fn font_belleginde(islem: impl FnOnce(*mut u8)) {
     unsafe {
         vga_ayar(0x3c4, 0x02, 0x04); // yalnızca 2. düzleme yaz
         vga_ayar(0x3c4, 0x04, 0x07); // düz (sıralı) adresleme
@@ -155,27 +141,7 @@ pub fn turkce_harfleri_yukle() {
         vga_ayar(0x3ce, 0x06, 0x04); // belleği 0xa0000'a bağla
     }
 
-    let mut noktasiz_i = oku(b'i');
-    noktasiz_i[..5].fill(0); // noktayı sil
-    yaz(0x98, noktasiz_i);
-
-    let mut i_buyuk = oku(b'I');
-    i_buyuk[0] = 0x18; // nokta ekle
-    yaz(0x9b, i_buyuk);
-
-    for (kaynak, yuva) in [(b's', 0x9c), (b'S', 0x9d)] {
-        let mut s = oku(kaynak);
-        s[12..15].copy_from_slice(&[0x18, 0x0c, 0x38]); // altına çengel
-        yaz(yuva, s);
-    }
-
-    let mut g = oku(b'g');
-    g[2..4].copy_from_slice(&[0x44, 0x38]); // üstüne kısa çizgi (breve)
-    yaz(0x9e, g);
-
-    let mut g_buyuk = oku(b'G');
-    g_buyuk[0..2].copy_from_slice(&[0x42, 0x3c]);
-    yaz(0x9f, g_buyuk);
+    islem(0xa0000 as *mut u8);
 
     unsafe {
         // Metin modunun normal ayarlarına dön.
@@ -185,6 +151,57 @@ pub fn turkce_harfleri_yukle() {
         vga_ayar(0x3ce, 0x05, 0x10);
         vga_ayar(0x3ce, 0x06, 0x0e);
     }
+}
+
+// 256 karakterin 8x16 resimleri (karakter başına 16 bayt). Piksel moduna geçince
+// bu bellek görünmez olur, o yüzden geçmeden önce kopyalanır.
+pub fn font_kopyala(hedef: &mut [u8; 256 * 16]) {
+    font_belleginde(|font| {
+        for (karakter, resim) in hedef.chunks_exact_mut(16).enumerate() {
+            for (satir, bayt) in resim.iter_mut().enumerate() {
+                *bayt = unsafe { font.add(karakter * 32 + satir).read_volatile() };
+            }
+        }
+    });
+}
+
+pub fn turkce_harfleri_yukle() {
+    font_belleginde(|font| {
+        let oku = |karakter: u8| {
+            let mut resim = [0u8; 16];
+            for (satir, bayt) in resim.iter_mut().enumerate() {
+                *bayt = unsafe { font.add(karakter as usize * 32 + satir).read_volatile() };
+            }
+            resim
+        };
+        let yaz = |yuva: u8, resim: [u8; 16]| {
+            for (satir, bayt) in resim.iter().enumerate() {
+                unsafe { font.add(yuva as usize * 32 + satir).write_volatile(*bayt) };
+            }
+        };
+
+        let mut noktasiz_i = oku(b'i');
+        noktasiz_i[..5].fill(0); // noktayı sil
+        yaz(0x98, noktasiz_i);
+
+        let mut i_buyuk = oku(b'I');
+        i_buyuk[0] = 0x18; // nokta ekle
+        yaz(0x9b, i_buyuk);
+
+        for (kaynak, yuva) in [(b's', 0x9c), (b'S', 0x9d)] {
+            let mut s = oku(kaynak);
+            s[12..15].copy_from_slice(&[0x18, 0x0c, 0x38]); // altına çengel
+            yaz(yuva, s);
+        }
+
+        let mut g = oku(b'g');
+        g[2..4].copy_from_slice(&[0x44, 0x38]); // üstüne kısa çizgi (breve)
+        yaz(0x9e, g);
+
+        let mut g_buyuk = oku(b'G');
+        g_buyuk[0..2].copy_from_slice(&[0x42, 0x3c]);
+        yaz(0x9f, g_buyuk);
+    });
 }
 
 // VGA ayarları "indeks portu + veri portu" çiftiyle yazılır.

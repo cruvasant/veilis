@@ -168,6 +168,7 @@ fn komut(satir: &str, toplam_ram: u64) {
             println!("  göster <ad> dosyanın içini yazar");
             println!("  düzenle <ad> dosyayı düzenleyicide açar (yoksa oluşturur)");
             println!("  sil <ad>    dosyayı siler");
+            println!("  arayüz      piksel moduna geçer (şimdilik geri dönüş yok)");
             println!("  yaz <metin> yazdığın metni geri yazar");
         }
         "dosyalar" => match dosya::listele() {
@@ -188,6 +189,16 @@ fn komut(satir: &str, toplam_ram: u64) {
         "düzenle" | "duzenle" => crate::duzenleyici::ac(geri_kalan.trim()),
         "sil" => match dosya::sil(geri_kalan.trim()) {
             Ok(()) => println!("{} silindi.", geri_kalan.trim()),
+            Err(hata) => println!("Hata: {}", hata),
+        },
+        "arayüz" | "arayuz" => match crate::grafik::baslat() {
+            Ok(ekran) => {
+                crate::grafik::demo(&ekran);
+                // Geçici: pencere yöneticisi gelince bu döngü onunla değişecek.
+                loop {
+                    x86_64::instructions::hlt();
+                }
+            }
             Err(hata) => println!("Hata: {}", hata),
         },
         "temizle" => vga::temizle(),
