@@ -14,6 +14,7 @@ mod allocator;
 mod ata;
 mod dosya;
 mod duzenleyici;
+mod fare;
 mod fro;
 mod gdt;
 mod interrupts;

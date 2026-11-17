@@ -20,6 +20,7 @@ const PIC_1: u8 = 32;
 const PIC_2: u8 = PIC_1 + 8;
 const ZAMANLAYICI: u8 = PIC_1;
 const KLAVYE: u8 = PIC_1 + 1;
+const FARE: u8 = PIC_2 + 4;
 
 static PICS: Mutex<ChainedPics> = Mutex::new(unsafe { ChainedPics::new(PIC_1, PIC_2) });
 
@@ -43,6 +44,7 @@ pub fn init() {
         idt.page_fault.set_handler_fn(page_fault);
         idt[ZAMANLAYICI].set_handler_fn(zamanlayici);
         idt[KLAVYE].set_handler_fn(klavye);
+        idt[FARE].set_handler_fn(fare);
         idt
     })
     .load();
@@ -50,10 +52,13 @@ pub fn init() {
     unsafe {
         let mut pics = PICS.lock();
         pics.initialize();
-        // Yalnızca zamanlayıcı (IRQ0) ve klavye (IRQ1) açık; fonksiyonu olmayan bir
-        // donanım kesmesi gelirse çekirdek çökerdi.
-        pics.write_masks(0b1111_1100, 0b1111_1111);
+        // Yalnızca zamanlayıcı (IRQ0), klavye (IRQ1), ikinci PIC'e giden hat (IRQ2)
+        // ve fare (IRQ12) açık; fonksiyonu olmayan bir donanım kesmesi gelirse
+        // çekirdek çökerdi.
+        pics.write_masks(0b1111_1000, 0b1110_1111);
     }
+    // Kesmeler hâlâ kapalı: klavye yöneticisi farenin onay baytlarını çalamaz.
+    crate::fare::baslat();
     x86_64::instructions::interrupts::enable();
 }
 
@@ -108,6 +113,13 @@ extern "x86-interrupt" fn klavye(_frame: InterruptStackFrame) {
     }
     // PIC'e "bitti" demezsek bir sonraki kesmeyi göndermez.
     unsafe { PICS.lock().notify_end_of_interrupt(KLAVYE) };
+}
+
+// Fare, paketin her baytı için ayrı bir kesme üretir.
+extern "x86-interrupt" fn fare(_frame: InterruptStackFrame) {
+    let bayt: u8 = unsafe { Port::new(0x60).read() };
+    crate::fare::bayt_isle(bayt);
+    unsafe { PICS.lock().notify_end_of_interrupt(FARE) };
 }
 
 // int3 komutuyla tetiklenir. Hata değil; iş bitince program kaldığı yerden devam eder.
