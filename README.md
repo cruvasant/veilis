@@ -3,13 +3,14 @@
 Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 Çekirdeği (kernel) Rust ile sıfırdan yazılıyor.
 
-> **Durum:** Aşama 1. Çekirdek açılıyor ve ekrana `Merhaba, ben Veilis` yazıyor.
+> **Durum:** Aşama 2. Çekirdek açılıyor ve `println!` ile ekrana yazabiliyor.
 > Henüz günlük kullanıma uygun değildir; bir öğrenme ve geliştirme projesidir.
 
 ## Neler var?
 
 - `no_std` ve `no_main` ile yazılmış bağımsız (freestanding) bir Rust çekirdeği
-- VGA metin tamponu üzerinden ekrana yazı
+- VGA metin tamponu üzerinden ekrana yazı: `print!` / `println!`, satır kaydırma
+- Panik olduğunda hata mesajını ekrana basma
 - `bootloader` 0.9 ile BIOS üzerinden önyükleme
 - QEMU sanal makinesinde çalıştırma
 
@@ -55,6 +56,7 @@ cargo bootimage
 | Dosya | Açıklama |
 |-------|----------|
 | `src/main.rs` | Çekirdeğin kaynak kodu (`_start` başlangıç noktası) |
+| `src/vga.rs` | VGA ekran yazıcısı ve `print!` / `println!` makroları |
 | `x86_64-veilis.json` | Derleme hedefi: işletim sistemi olmayan x86_64 |
 | `.cargo/config.toml` | `core` kütüphanesini kaynaktan derleme ve `cargo run` ayarları |
 | `rust-toolchain.toml` | Kullanılacak Rust sürümü (nightly) |
