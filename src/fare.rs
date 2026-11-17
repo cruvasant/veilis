@@ -103,8 +103,9 @@ pub fn baslat() -> bool {
 // IRQ12 yöneticisi her gelen baytı buraya verir.
 pub fn bayt_isle(b: u8) {
     let sira = SIRA.load(Ordering::Relaxed) as usize;
-    // İlk baytın 3. biti hep 1'dir; değilse paket kaymıştır, o baytı atıp bekleriz.
-    if sira == 0 && b & 0x08 == 0 {
+    // İlk baytın 3. biti hep 1, taşma bitleri (6 ve 7) 0 olur; değilse paket kaymıştır (örneğin
+    // başlangıçtan kalan 0xfa onayı), o baytı atıp bekleriz.
+    if sira == 0 && b & 0xc8 != 0x08 {
         return;
     }
     if sira < 2 {

@@ -1,12 +1,20 @@
 // VGA metin modu: 0xb8000 adresinde 80x25 hücrelik bir tablo.
 // Her hücre 16 bit: alttaki 8 bit karakter, üstteki 8 bit renk.
 
+use alloc::boxed::Box;
 use core::fmt;
+use core::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use spin::Mutex;
 
 pub const GENISLIK: usize = 80;
 pub const YUKSEKLIK: usize = 25;
-const TAMPON: *mut u16 = 0xb8000 as *mut u16;
+
+// Yazılar önce 0xb8000'e gider; arayüz açılınca RAM'deki bir tabloya yönlenir.
+static TAMPON: AtomicPtr<u16> = AtomicPtr::new(0xb8000 as *mut u16);
+// Her yazıda kurulur; arayüz bununla yeniden çizmesi gerekip gerekmediğini anlar.
+static DEGISTI: AtomicBool = AtomicBool::new(false);
+// Düzenleyici hücreleri kendisi yazar; o zaman kabuğun imleci ekranda anlamsızdır.
+static METIN_IMLECI: AtomicBool = AtomicBool::new(true);
 
 // Siyah zemin üstüne açık camgöbeği
 const VARSAYILAN_RENK: u8 = 0x0b;
@@ -34,7 +42,7 @@ impl Yazici {
     // Hücreye hep volatile okuyup yazıyoruz; yoksa derleyici ekrana yazmayı
     // "sonucu kullanılmıyor" diye silebilir.
     fn hucre(&self, satir: usize, sutun: usize) -> *mut u16 {
-        unsafe { TAMPON.add(satir * GENISLIK + sutun) }
+        unsafe { TAMPON.load(Ordering::Relaxed).add(satir * GENISLIK + sutun) }
     }
 
     fn bayt_yaz(&mut self, bayt: u8) {
@@ -89,6 +97,8 @@ impl Yazici {
         }
         self.satir = 0;
         self.sutun = 0;
+        METIN_IMLECI.store(true, Ordering::Relaxed);
+        DEGISTI.store(true, Ordering::Relaxed);
     }
 }
 
@@ -117,6 +127,7 @@ impl fmt::Write for Yazici {
                 _ => self.bayt_yaz(karakter_kodu(c)),
             }
         }
+        DEGISTI.store(true, Ordering::Relaxed);
         Ok(())
     }
 }
@@ -125,8 +136,35 @@ impl fmt::Write for Yazici {
 pub fn hucre_yaz(satir: usize, sutun: usize, c: char, renk: u8) {
     if satir < YUKSEKLIK && sutun < GENISLIK {
         let deger = (renk as u16) << 8 | karakter_kodu(c) as u16;
-        unsafe { TAMPON.add(satir * GENISLIK + sutun).write_volatile(deger) };
+        unsafe { TAMPON.load(Ordering::Relaxed).add(satir * GENISLIK + sutun).write_volatile(deger) };
+        METIN_IMLECI.store(false, Ordering::Relaxed);
+        DEGISTI.store(true, Ordering::Relaxed);
     }
+}
+
+pub fn kirli_al() -> bool {
+    DEGISTI.swap(false, Ordering::Relaxed)
+}
+
+/// Hücreleri `hedef`e kopyalar; (imleç satırı, imleç sütunu, imleç görünsün mü) döner.
+pub fn goruntu(hedef: &mut [u16; GENISLIK * YUKSEKLIK]) -> (usize, usize, bool) {
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        let yazici = YAZICI.lock();
+        for (i, hucre) in hedef.iter_mut().enumerate() {
+            *hucre = unsafe { TAMPON.load(Ordering::Relaxed).add(i).read_volatile() };
+        }
+        (yazici.satir, yazici.sutun.min(GENISLIK - 1), METIN_IMLECI.load(Ordering::Relaxed))
+    })
+}
+
+/// Bundan sonra tüm yazılar RAM'deki bir tabloya gider; tablo `icerik`le başlar.
+pub fn ram_tamponuna_gec(icerik: [u16; GENISLIK * YUKSEKLIK]) {
+    let tablo = Box::leak(Box::new(icerik));
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        let _kilit = YAZICI.lock();
+        TAMPON.store(tablo.as_mut_ptr(), Ordering::Relaxed);
+    });
+    DEGISTI.store(true, Ordering::Relaxed);
 }
 
 // Yazı tipi, ekran kartı belleğinin 2. düzleminde (plane 2) durur: her karakter

@@ -3,9 +3,9 @@
 Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 Çekirdeği (kernel) Rust ile sıfırdan yazılıyor.
 
-> **Durum:** Aşama 10. Çekirdek açılıyor, işlemci istisnalarını yakalıyor, belleği sayfalarla
+> **Durum:** Aşama 11. Çekirdek açılıyor, işlemci istisnalarını yakalıyor, belleği sayfalarla
 > yönetiyor, Türkçe klavyeyle kullanılan bir komut satırı, Fro dilini, diske dosya kaydetmeyi ve
-> bir metin düzenleyiciyi sunuyor.
+> bir metin düzenleyiciyi ve fareyle kullanılan pencereli bir masaüstünü sunuyor.
 > Henüz günlük kullanıma uygun değildir; bir öğrenme ve geliştirme projesidir.
 
 ## Neler var?
@@ -18,13 +18,17 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 - GDT ve TSS ile double fault için ayrı stack, böylece stack taşması da yakalanıyor
 - PIC üzerinden donanım kesmeleri: zamanlayıcı ve klavye
 - Türkçe Q klavye düzeni (Shift, Caps Lock, AltGr) ve VGA yazı tipine eklenen ı, İ, ş, Ş, ğ, Ğ
-- Sayfalama (paging), fiziksel çerçeve dağıtıcı ve 1 MiB heap (`String`, `Vec`, `Box`)
+- Sayfalama (paging), fiziksel çerçeve dağıtıcı ve 16 MiB heap (`String`, `Vec`, `Box`)
 - Page fault yakalama
 - ATA disk sürücüsü ve basit bir dosya sistemi (VeilisFS): 32 dosya, dosya başına en fazla 8 KiB
 - Basit komut satırı: `yardım`, `temizle`, `sürüm`, `süre`, `bellek`, `yaz`, `fro`,
   `dosyalar`, `göster`, `düzenle`, `sil`
 - Tam ekran metin düzenleyici (`düzenle <ad>`): ok tuşları, Home/End, Backspace/Delete,
   Ctrl+S ile kaydetme, Esc ile çıkış; kaydedilmemiş değişiklik varsa çıkmadan önce uyarır
+- Masaüstü (`arayüz` komutu): 1024x768 piksel modu (Bochs/BGA), görev çubuğu ve saat, PS/2 fare,
+  tıklayınca öne gelen ve başlık çubuğundan sürüklenen pencereler. Komut satırı, Fro ve düzenleyici
+  bir terminal penceresinin içinde çalışır; çizim önce RAM'deki bir tuvale yapılır, sonra tek seferde
+  ekrana kopyalanır
 - Fro dili: Türkçe anahtar kelimeli, bytecode'a derlenip sanal makinede çalışan bir dil
   (metin, liste, karşılaştırma, `eğer`, `döngü`, fonksiyonlar)
 
@@ -137,6 +141,10 @@ cargo bootimage
 | `src/ata.rs` | ATA disk sürücüsü |
 | `src/dosya.rs` | VeilisFS dosya sistemi |
 | `src/duzenleyici.rs` | Tam ekran metin düzenleyici |
+| `src/fare.rs` | PS/2 fare sürücüsü |
+| `src/pci.rs` | PCI taraması (ekran kartını bulur) |
+| `src/grafik.rs` | Piksel modu (BGA) ve tuvale çizim: dikdörtgen, yazı |
+| `src/masaustu.rs` | Pencere yöneticisi: pencereler, görev çubuğu, fare imleci |
 | `src/gdt.rs` | GDT ve TSS: istisnalar için yedek stack |
 | `x86_64-veilis.json` | Derleme hedefi: işletim sistemi olmayan x86_64 |
 | `.cargo/config.toml` | `core` kütüphanesini kaynaktan derleme ve `cargo run` ayarları |

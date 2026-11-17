@@ -1,5 +1,6 @@
 // Piksel modu: QEMU'nun Bochs/BGA ekran kartıyla 1024x768, 32 bit doğrusal çerçeve
-// belleği. Renkler 0x00RRGGBB.
+// belleği. Renkler 0x00RRGGBB. Çizimler önce RAM'deki bir tuvale yapılır, Ekran
+// yalnızca bitmiş tuvali çerçeve belleğine kopyalar.
 
 use core::sync::atomic::{AtomicU64, Ordering};
 use spin::Mutex;
@@ -7,8 +8,8 @@ use x86_64::instructions::port::Port;
 
 use crate::{pci, vga};
 
-const GENISLIK: usize = 1024;
-const YUKSEKLIK: usize = 768;
+pub const GENISLIK: usize = 1024;
+pub const YUKSEKLIK: usize = 768;
 
 // Önyükleyicinin fiziksel belleği eşlediği sanal adres; main.rs bir kez ayarlar.
 static FIZIKSEL_OFSET: AtomicU64 = AtomicU64::new(0);
@@ -20,14 +21,13 @@ pub fn ofset_ayarla(ofset: u64) {
     FIZIKSEL_OFSET.store(ofset, Ordering::Relaxed);
 }
 
-#[derive(Clone, Copy)]
+// Çerçeve belleğinin başı; satır uzunluğu GENISLIK piksel.
 pub struct Ekran {
     adres: *mut u32,
-    pub genislik: usize,
-    pub yukseklik: usize,
-    // Satır başına piksel sayısı
-    pitch: usize,
 }
+
+// Ekran yalnızca masaüstü kilidi altında kullanılır.
+unsafe impl Send for Ekran {}
 
 fn bga_yaz(indeks: u16, deger: u16) {
     unsafe {
@@ -58,50 +58,58 @@ pub fn baslat() -> Result<Ekran, &'static str> {
     bga_yaz(3, 32);
     bga_yaz(4, 0x41); // açık + doğrusal çerçeve belleği
 
-    Ok(Ekran {
-        adres: (FIZIKSEL_OFSET.load(Ordering::Relaxed) + bar0) as *mut u32,
-        genislik: GENISLIK,
-        yukseklik: YUKSEKLIK,
-        pitch: GENISLIK,
-    })
-}
-
-pub fn demo(ekran: &Ekran) {
-    ekran.dikdortgen(0, 0, ekran.genislik, ekran.yukseklik, 0x0020_3040);
-    ekran.dikdortgen(262, 234, 500, 300, 0x00e8_e8e8);
-    ekran.dikdortgen(262, 234, 500, 24, 0x0030_60a0);
-    ekran.metin(270, 238, "Veilis", 0x00ff_ffff, None);
-    ekran.metin(278, 290, "Veilis arayüzü: ç ğ ı İ ö ş ü", 0x0010_1010, None);
+    Ok(Ekran { adres: (FIZIKSEL_OFSET.load(Ordering::Relaxed) + bar0) as *mut u32 })
 }
 
 impl Ekran {
-    pub fn piksel(&self, x: usize, y: usize, renk: u32) {
-        if x < self.genislik && y < self.yukseklik {
-            unsafe { self.adres.add(y * self.pitch + x).write_volatile(renk) };
+    // Tuvali tek seferde kopyalıyoruz; piksel piksel volatile yazmaktan çok daha hızlı.
+    pub fn kopyala(&self, tuval: &[u32]) {
+        assert_eq!(tuval.len(), GENISLIK * YUKSEKLIK);
+        unsafe { core::ptr::copy_nonoverlapping(tuval.as_ptr(), self.adres, tuval.len()) };
+    }
+}
+
+// Aşağıdakiler GENISLIK x YUKSEKLIK piksellik bir tuvale çizer; ekran dışına
+// taşan kısımlar kırpılır.
+
+pub fn piksel(tuval: &mut [u32], x: i32, y: i32, renk: u32) {
+    // Negatifler işaretsize çevrilince çok büyür; tek karşılaştırma iki sınırı da yakalar.
+    if (x as u32) < GENISLIK as u32 && (y as u32) < YUKSEKLIK as u32 {
+        tuval[y as usize * GENISLIK + x as usize] = renk;
+    }
+}
+
+pub fn dikdortgen(tuval: &mut [u32], x: i32, y: i32, g: i32, h: i32, renk: u32) {
+    let (x0, x1) = (x.max(0) as usize, (x + g).clamp(0, GENISLIK as i32) as usize);
+    let (y0, y1) = (y.max(0) as usize, (y + h).clamp(0, YUKSEKLIK as i32) as usize);
+    // İlk satırı doldurup gerisini kopyalıyoruz; kopyalama bellek işlemi, hata ayıklama derlemesinde bile hızlı.
+    if x0 < x1 && y0 < y1 {
+        let ilk = y0 * GENISLIK + x0;
+        tuval[ilk..ilk + x1 - x0].fill(renk);
+        for yy in y0 + 1..y1 {
+            tuval.copy_within(ilk..ilk + x1 - x0, yy * GENISLIK + x0);
         }
     }
+}
 
-    pub fn dikdortgen(&self, x: usize, y: usize, g: usize, h: usize, renk: u32) {
-        for yy in y..y.saturating_add(h).min(self.yukseklik) {
-            for xx in x..x.saturating_add(g).min(self.genislik) {
-                self.piksel(xx, yy, renk);
+// Her karakter 8x16 hücre; arka plan verilmezse yalnızca harfin pikselleri çizilir.
+pub fn harf(tuval: &mut [u32], x: i32, y: i32, kod: u8, on: u32, arka: Option<u32>) {
+    let font = FONT.lock();
+    // Döngüler elle yazıldı: hata ayıklama derlemesinde yineleyiciler çok yavaş.
+    for satir in 0..16 {
+        let bayt = font[kod as usize * 16 + satir];
+        for sutun in 0..8 {
+            if bayt & (0x80 >> sutun) != 0 {
+                piksel(tuval, x + sutun, y + satir as i32, on);
+            } else if let Some(arka) = arka {
+                piksel(tuval, x + sutun, y + satir as i32, arka);
             }
         }
     }
+}
 
-    // Her karakter 8x16 hücre; arka plan verilmezse yalnızca harfin pikselleri çizilir.
-    pub fn metin(&self, x: usize, y: usize, yazi: &str, on: u32, arka: Option<u32>) {
-        let font = FONT.lock();
-        for (sira, c) in yazi.chars().enumerate() {
-            let resim = &font[vga::karakter_kodu(c) as usize * 16..][..16];
-            for (satir, bayt) in resim.iter().enumerate() {
-                for sutun in 0..8 {
-                    let renk = if bayt & (0x80 >> sutun) != 0 { Some(on) } else { arka };
-                    if let Some(renk) = renk {
-                        self.piksel(x + sira * 8 + sutun, y + satir, renk);
-                    }
-                }
-            }
-        }
+pub fn metin(tuval: &mut [u32], x: i32, y: i32, yazi: &str, on: u32, arka: Option<u32>) {
+    for (sira, c) in yazi.chars().enumerate() {
+        harf(tuval, x + sira as i32 * 8, y, vga::karakter_kodu(c), on, arka);
     }
 }

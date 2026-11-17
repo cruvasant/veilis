@@ -21,6 +21,7 @@ mod grafik;
 mod interrupts;
 mod kabuk;
 mod klavye;
+mod masaustu;
 mod memory;
 mod pci;
 mod vga;
@@ -72,5 +73,6 @@ fn bekle() -> ! {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     println!("{}", info);
+    masaustu::panikte_ciz();
     bekle()
 }
