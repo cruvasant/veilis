@@ -8,3 +8,4 @@ license = "MIT"
 # BIOS ile açılıp çekirdeğimizi belleğe yükleyen önyükleyici.
 bootloader = "0.9"
 spin = "0.12.3"
+x86_64 = "0.15.5"

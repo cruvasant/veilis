@@ -4,7 +4,10 @@
 // Normal `main` başlangıç noktasını kullanma: onu çağıracak bir çalışma
 // zamanı (runtime) yok. Başlangıç noktasını kendimiz tanımlıyoruz.
 #![no_main]
+// İstisna fonksiyonları için özel çağrı biçimi (henüz yalnızca nightly'de).
+#![feature(abi_x86_interrupt)]
 
+mod interrupts;
 mod vga;
 
 use core::panic::PanicInfo;
@@ -16,6 +19,12 @@ use core::panic::PanicInfo;
 pub extern "C" fn _start() -> ! {
     println!("Merhaba, ben Veilis");
     println!("Surum {}", env!("CARGO_PKG_VERSION"));
+
+    interrupts::init();
+
+    // Deneme: breakpoint istisnası tetikle, sonra devam ettiğimizi göster.
+    x86_64::instructions::interrupts::int3();
+    println!("Breakpoint sonrasi devam ediyoruz");
 
     loop {}
 }
