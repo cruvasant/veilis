@@ -8,6 +8,14 @@ use x86_64::instructions::interrupts;
 
 use crate::{dosya, fro, print, println, vga};
 
+// Karakter olmayan tuşlar için Unicode'un "özel kullanım" bölgesinden kodlar.
+pub const YUKARI: char = '\u{e000}';
+pub const ASAGI: char = '\u{e001}';
+pub const SOL: char = '\u{e002}';
+pub const SAG: char = '\u{e003}';
+pub const BAS: char = '\u{e004}';
+pub const SON: char = '\u{e005}';
+
 const KUYRUK_BOYUTU: usize = 32;
 // "> " ile birlikte bir ekran satırına sığsın.
 const EN_FAZLA_KARAKTER: usize = 70;
@@ -34,7 +42,7 @@ pub fn tus_ekle(c: char) {
     }
 }
 
-fn sonraki_tus() -> char {
+pub fn sonraki_tus() -> char {
     loop {
         // Kesmeleri kapatıp bakıyoruz; sıra boşsa "kesmeleri aç ve uyu" tek adımda
         // yapılır, böylece arada gelen bir tuşu kaçırmayız.
@@ -94,6 +102,7 @@ pub fn calistir(toplam_ram: u64) -> ! {
                     print!("\u{8}");
                 }
             }
+            YUKARI..=SON => {}
             c if !c.is_control() && satir.chars().count() < EN_FAZLA_KARAKTER => {
                 satir.push(c);
                 print!("{}", c);
@@ -157,6 +166,7 @@ fn komut(satir: &str, toplam_ram: u64) {
             println!("  fro         Fro dilini başlatır");
             println!("  dosyalar    kayıtlı dosyaları listeler");
             println!("  göster <ad> dosyanın içini yazar");
+            println!("  düzenle <ad> dosyayı düzenleyicide açar (yoksa oluşturur)");
             println!("  sil <ad>    dosyayı siler");
             println!("  yaz <metin> yazdığın metni geri yazar");
         }
@@ -166,9 +176,16 @@ fn komut(satir: &str, toplam_ram: u64) {
             Err(hata) => println!("Hata: {}", hata),
         },
         "göster" | "goster" => match dosya::oku(geri_kalan.trim()) {
-            Ok(veri) => print!("{}", String::from_utf8_lossy(&veri)),
+            Ok(veri) => {
+                print!("{}", String::from_utf8_lossy(&veri));
+                // Düzenleyicide yazılan dosya yeni satırla bitmeyebilir; komut istemi alt satıra insin.
+                if veri.last().is_some_and(|&b| b != b'\n') {
+                    println!();
+                }
+            }
             Err(hata) => println!("Hata: {}", hata),
         },
+        "düzenle" | "duzenle" => crate::duzenleyici::ac(geri_kalan.trim()),
         "sil" => match dosya::sil(geri_kalan.trim()) {
             Ok(()) => println!("{} silindi.", geri_kalan.trim()),
             Err(hata) => println!("Hata: {}", hata),

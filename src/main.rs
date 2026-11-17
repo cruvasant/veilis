@@ -13,6 +13,7 @@ extern crate alloc;
 mod allocator;
 mod ata;
 mod dosya;
+mod duzenleyici;
 mod fro;
 mod gdt;
 mod interrupts;

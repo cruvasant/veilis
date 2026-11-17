@@ -107,11 +107,16 @@ pub fn oku(ad: &str) -> Result<Vec<u8>, &'static str> {
     Ok(veri)
 }
 
-/// Dosyayı oluşturur; aynı adda dosya varsa üzerine yazar.
-pub fn yaz(ad: &str, veri: &[u8]) -> Result<(), &'static str> {
+pub fn ad_kontrol(ad: &str) -> Result<(), &'static str> {
     if ad.is_empty() || ad.len() > EN_UZUN_AD || ad.contains(char::is_whitespace) {
         return Err("dosya adı boş olamaz, boşluk içeremez, en fazla 46 bayt olabilir");
     }
+    Ok(())
+}
+
+/// Dosyayı oluşturur; aynı adda dosya varsa üzerine yazar.
+pub fn yaz(ad: &str, veri: &[u8]) -> Result<(), &'static str> {
+    ad_kontrol(ad)?;
     if veri.len() > EN_BUYUK_DOSYA {
         return Err("dosya çok büyük (en fazla 8 KiB)");
     }

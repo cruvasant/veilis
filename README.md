@@ -3,8 +3,9 @@
 Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 Çekirdeği (kernel) Rust ile sıfırdan yazılıyor.
 
-> **Durum:** Aşama 9. Çekirdek açılıyor, işlemci istisnalarını yakalıyor, belleği sayfalarla
-> yönetiyor, Türkçe klavyeyle kullanılan bir komut satırı, Fro dilini ve diske dosya kaydetmeyi sunuyor.
+> **Durum:** Aşama 10. Çekirdek açılıyor, işlemci istisnalarını yakalıyor, belleği sayfalarla
+> yönetiyor, Türkçe klavyeyle kullanılan bir komut satırı, Fro dilini, diske dosya kaydetmeyi ve
+> bir metin düzenleyiciyi sunuyor.
 > Henüz günlük kullanıma uygun değildir; bir öğrenme ve geliştirme projesidir.
 
 ## Neler var?
@@ -21,7 +22,9 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 - Page fault yakalama
 - ATA disk sürücüsü ve basit bir dosya sistemi (VeilisFS): 32 dosya, dosya başına en fazla 8 KiB
 - Basit komut satırı: `yardım`, `temizle`, `sürüm`, `süre`, `bellek`, `yaz`, `fro`,
-  `dosyalar`, `göster`, `sil`
+  `dosyalar`, `göster`, `düzenle`, `sil`
+- Tam ekran metin düzenleyici (`düzenle <ad>`): ok tuşları, Home/End, Backspace/Delete,
+  Ctrl+S ile kaydetme, Esc ile çıkış; kaydedilmemiş değişiklik varsa çıkmadan önce uyarır
 - Fro dili: Türkçe anahtar kelimeli, bytecode'a derlenip sanal makinede çalışan bir dil
   (metin, liste, karşılaştırma, `eğer`, `döngü`, fonksiyonlar)
 
@@ -70,6 +73,7 @@ Desteklenenler:
 - Çalışan bir döngü Ctrl+C ile durdurulur
 - `kaydet <ad>`: o Fro oturumunda hatasız çalışan bütün kodu veri diskine kaydeder;
   `yükle <ad>`: kaydedilen kodu çalıştırır (fonksiyonlar yeniden tanımlanır)
+- Uzun programlar komut satırında `düzenle <ad>` ile yazılıp Fro'da `yükle <ad>` ile çalıştırılabilir
 
 Her satır önce sözcüklere ayrılır, sonra bytecode'a derlenir ve sanal makinede çalıştırılır;
 değişken adları derleme sırasında numaraya çevrildiği için çalışırken isim aranmaz.
@@ -132,6 +136,7 @@ cargo bootimage
 | `src/fro/` | Fro dili: sözcük ayırıcı, derleyici ve sanal makine |
 | `src/ata.rs` | ATA disk sürücüsü |
 | `src/dosya.rs` | VeilisFS dosya sistemi |
+| `src/duzenleyici.rs` | Tam ekran metin düzenleyici |
 | `src/gdt.rs` | GDT ve TSS: istisnalar için yedek stack |
 | `x86_64-veilis.json` | Derleme hedefi: işletim sistemi olmayan x86_64 |
 | `.cargo/config.toml` | `core` kütüphanesini kaynaktan derleme ve `cargo run` ayarları |

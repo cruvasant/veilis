@@ -2,7 +2,7 @@
 // durumlarda işlemci, IDT'de (Interrupt Descriptor Table) o hata için
 // kayıtlı fonksiyonu çağırır.
 
-use pc_keyboard::{DecodedKey, HandleControl, PS2Keyboard, ScancodeSet1};
+use pc_keyboard::{DecodedKey, HandleControl, KeyCode, PS2Keyboard, ScancodeSet1};
 use pic8259::ChainedPics;
 use spin::{Mutex, Once};
 use x86_64::instructions::port::Port;
@@ -89,6 +89,20 @@ extern "x86-interrupt" fn klavye(_frame: InterruptStackFrame) {
             // Ctrl+C sıraya girmez: o an çalışan Fro kodunu hemen durdurmalı.
             Some(DecodedKey::Unicode('\u{3}')) => crate::fro::DURDUR.store(true, Ordering::Relaxed),
             Some(DecodedKey::Unicode(c)) => crate::kabuk::tus_ekle(c),
+            // Ok tuşları gibi karakter olmayan tuşlar, düzenleyici için özel kodlarla sıraya girer.
+            Some(DecodedKey::RawKey(tus)) => {
+                use crate::kabuk::*;
+                let c = match tus {
+                    KeyCode::ArrowUp => Some(YUKARI),
+                    KeyCode::ArrowDown => Some(ASAGI),
+                    KeyCode::ArrowLeft => Some(SOL),
+                    KeyCode::ArrowRight => Some(SAG),
+                    KeyCode::Home => Some(BAS),
+                    KeyCode::End => Some(SON),
+                    _ => None,
+                };
+                c.map(tus_ekle);
+            }
             _ => {}
         }
     }

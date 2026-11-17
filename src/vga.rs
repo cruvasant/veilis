@@ -4,8 +4,8 @@
 use core::fmt;
 use spin::Mutex;
 
-const GENISLIK: usize = 80;
-const YUKSEKLIK: usize = 25;
+pub const GENISLIK: usize = 80;
+pub const YUKSEKLIK: usize = 25;
 const TAMPON: *mut u16 = 0xb8000 as *mut u16;
 
 // Siyah zemin üstüne açık camgöbeği
@@ -96,20 +96,36 @@ pub fn temizle() {
     x86_64::instructions::interrupts::without_interrupts(|| YAZICI.lock().temizle());
 }
 
+// Karakterin VGA yazı tipindeki numarası.
+fn karakter_kodu(c: char) -> u8 {
+    match c {
+        ' '..='~' => c as u8,
+        _ => match TURKCE.iter().find(|(harf, _)| *harf == c) {
+            Some(&(_, yuva)) => yuva,
+            // Gösteremediğimiz karakterler yerine ■
+            None => 0xfe,
+        },
+    }
+}
+
 impl fmt::Write for Yazici {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for c in s.chars() {
             match c {
-                ' '..='~' | '\n' => self.bayt_yaz(c as u8),
+                '\n' => self.bayt_yaz(b'\n'),
                 '\u{8}' => self.geri_sil(),
-                _ => match TURKCE.iter().find(|(harf, _)| *harf == c) {
-                    Some(&(_, yuva)) => self.bayt_yaz(yuva),
-                    // Gösteremediğimiz karakterler yerine ■
-                    None => self.bayt_yaz(0xfe),
-                },
+                _ => self.bayt_yaz(karakter_kodu(c)),
             }
         }
         Ok(())
+    }
+}
+
+/// Ekranın istenen hücresine doğrudan yazar (düzenleyici tüm ekranı kendisi çizer).
+pub fn hucre_yaz(satir: usize, sutun: usize, c: char, renk: u8) {
+    if satir < YUKSEKLIK && sutun < GENISLIK {
+        let deger = (renk as u16) << 8 | karakter_kodu(c) as u16;
+        unsafe { TAMPON.add(satir * GENISLIK + sutun).write_volatile(deger) };
     }
 }
 
