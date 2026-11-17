@@ -1,14 +1,3 @@
 [unstable]
-# Hedefimiz için hazır derlenmiş core yok; kaynaktan kendimiz derliyoruz.
-build-std = ["core", "compiler_builtins", "alloc"]
-# memcpy, memset gibi bellek fonksiyonlarını compiler_builtins sağlasın.
-build-std-features = ["compiler-builtins-mem"]
-# Kendi .json hedef dosyamızı kullanabilmek için (nightly bunu açıkça istiyor).
-json-target-spec = true
-
-[build]
-target = "x86_64-veilis.json"
-
-[target.'cfg(target_os = "none")']
-# `cargo run` imajı üretip QEMU'da açsın.
-runner = "bootimage runner"
+# build.rs'in çekirdeği (başka hedefe derlenen bir ikili) bağımlılık olarak alabilmesi için.
+bindeps = true

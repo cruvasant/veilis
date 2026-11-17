@@ -5,19 +5,20 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 
 > **Durum:** Aşama 11. Çekirdek açılıyor, işlemci istisnalarını yakalıyor, belleği sayfalarla
 > yönetiyor, Türkçe klavyeyle kullanılan bir komut satırı, Fro dilini, diske dosya kaydetmeyi ve
-> bir metin düzenleyiciyi ve fareyle kullanılan pencereli bir masaüstünü sunuyor.
+> bir metin düzenleyiciyi sunuyor; BIOS ve UEFI ile açılıyor. Masaüstü, çerçeve belleğine taşınırken geçici olarak kapalı.
 > Henüz günlük kullanıma uygun değildir; bir öğrenme ve geliştirme projesidir.
 
 ## Neler var?
 
 - `no_std` ve `no_main` ile yazılmış bağımsız (freestanding) bir Rust çekirdeği
-- `bootloader` 0.9 ile BIOS üzerinden önyükleme, QEMU sanal makinesinde çalıştırma
-- VGA metin tamponu üzerinden ekrana yazı: `print!` / `println!`, satır kaydırma
+- `bootloader` 0.11 ile hem BIOS hem UEFI üzerinden önyükleme, QEMU sanal makinesinde çalıştırma
+- `print!` / `println!` ile yazı: RAM'deki 80x25 metin tablosuna ve seri porta (COM1) gider.
+  Ekrana çizim henüz yok; ekran önyükleyicinin verdiği çerçeve belleğiyle zemin renginden ibaret
 - Panik olduğunda hata mesajını ekrana basma
 - IDT ile işlemci istisnalarını yakalama: breakpoint ve double fault
 - GDT ve TSS ile double fault için ayrı stack, böylece stack taşması da yakalanıyor
 - PIC üzerinden donanım kesmeleri: zamanlayıcı ve klavye
-- Türkçe Q klavye düzeni (Shift, Caps Lock, AltGr) ve VGA yazı tipine eklenen ı, İ, ş, Ş, ğ, Ğ
+- Türkçe Q klavye düzeni (Shift, Caps Lock, AltGr)
 - Sayfalama (paging), fiziksel çerçeve dağıtıcı ve 16 MiB heap (`String`, `Vec`, `Box`)
 - Page fault yakalama
 - ATA disk sürücüsü ve basit bir dosya sistemi (VeilisFS): 32 dosya, dosya başına en fazla 8 KiB
@@ -25,10 +26,8 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
   `dosyalar`, `göster`, `düzenle`, `sil`
 - Tam ekran metin düzenleyici (`düzenle <ad>`): ok tuşları, Home/End, Backspace/Delete,
   Ctrl+S ile kaydetme, Esc ile çıkış; kaydedilmemiş değişiklik varsa çıkmadan önce uyarır
-- Masaüstü (`arayüz` komutu): 1024x768 piksel modu (Bochs/BGA), görev çubuğu ve saat, PS/2 fare,
-  tıklayınca öne gelen ve başlık çubuğundan sürüklenen pencereler. Komut satırı, Fro ve düzenleyici
-  bir terminal penceresinin içinde çalışır; çizim önce RAM'deki bir tuvale yapılır, sonra tek seferde
-  ekrana kopyalanır
+- Masaüstü (`src/masaustu.rs`): şimdilik devre dışı; önyükleyicinin çerçeve belleğine taşınana kadar
+  `arayüz` komutu "henüz hazır değil" der
 - Fro dili: Türkçe anahtar kelimeli, bytecode'a derlenip sanal makinede çalışan bir dil
   (metin, liste, karşılaştırma, `eğer`, `döngü`, fonksiyonlar)
 
@@ -87,18 +86,15 @@ değişken adları derleme sırasında numaraya çevrildiği için çalışırke
 | Araç | Ne işe yarar |
 |------|--------------|
 | [rustup](https://rustup.rs) | Rust sürümlerini kurar ve yönetir |
-| Rust nightly + `rust-src` + `llvm-tools-preview` | `rust-toolchain.toml` sayesinde proje klasöründe otomatik seçilir |
-| [`bootimage`](https://github.com/rust-osdev/bootimage) | Çekirdekten önyüklenebilir disk imajı üretir |
+| Rust nightly + `rust-src` + `llvm-tools-preview` + `x86_64-unknown-none` hedefi | `rust-toolchain.toml` sayesinde proje klasöründe otomatik kurulur ve seçilir |
 | [QEMU](https://www.qemu.org/download/) | Çekirdeği sanal makinede çalıştırır |
 
-`bootimage` kurulumu:
-
-```sh
-cargo install bootimage
-```
+Ek bir araç gerekmez: disk imajlarını `bootloader` kütüphanesi `build.rs` içinden üretir.
 
 QEMU kurulduktan sonra `qemu-system-x86_64` komutunun PATH'te olduğundan emin olun.
-Windows'ta bu klasör genellikle `C:\Program Files\qemu` olur.
+Windows'ta bu klasör genellikle `C:\Program Files\qemu` olur. UEFI ile açmak için QEMU'nun
+`share` klasöründeki `edk2-x86_64-code.fd` yazılımı kullanılır; başka bir yerdeyse
+`VEILIS_UEFI_YAZILIMI` ortam değişkenine dosyanın yolunu verin.
 
 ## Çalıştırma
 
@@ -114,40 +110,43 @@ cargo run
 bir diske ise güvenlik için hiç yazmaz. `veri.img` kişisel dosyalarını içerdiği için `.gitignore`
 ile depo dışında tutulur.
 
-`cargo run` önce çekirdeği derler, sonra disk imajını üretir ve QEMU'da açar.
-Açılan pencerede `Merhaba, ben Veilis` yazısı ve komut satırı görünür. Pencereye tıklayıp
-`yardım` yazarak komutları görebilirsiniz.
-
-Yalnızca disk imajını üretmek için:
+`cargo run` önce çekirdeği derler, sonra BIOS ve UEFI disk imajlarını üretir ve BIOS imajını
+QEMU'da açar. UEFI imajını açmak için:
 
 ```sh
-cargo bootimage
+cargo run -- uefi
 ```
 
-İmaj `target/x86_64-veilis/debug/bootimage-veilis.bin` konumunda oluşur.
+Ekran şimdilik yalnızca zemin rengiyle dolar; yazılar `cargo run` komutunun çalıştığı terminale
+seri port (COM1) üzerinden gelir. Komut satırı QEMU penceresindeki klavyeyle kullanılır
+(pencereye tıklayıp `yardım` yazın), çıktısı terminalde görünür.
+
+İmajlar `target/veilis-bios.img` ve `target/veilis-uefi.img` olarak yazılır. Gerçek bir makinede
+denemek için bu dosyalardan birini USB belleğe yazabilirsiniz (içindekiler silinir).
 
 ## Proje yapısı
 
 | Dosya | Açıklama |
 |-------|----------|
-| `src/main.rs` | Çekirdeğin kaynak kodu (`_start` başlangıç noktası) |
-| `src/vga.rs` | VGA ekran yazıcısı ve `print!` / `println!` makroları |
-| `src/interrupts.rs` | Kesme tablosu (IDT), istisnalar, zamanlayıcı ve klavye |
-| `src/klavye.rs` | Türkçe Q klavye düzeni |
-| `src/kabuk.rs` | Komut satırı ve komutlar |
-| `src/memory.rs` | Sayfa tabloları ve fiziksel çerçeve dağıtıcı |
-| `src/allocator.rs` | Heap |
-| `src/fro/` | Fro dili: sözcük ayırıcı, derleyici ve sanal makine |
-| `src/ata.rs` | ATA disk sürücüsü |
-| `src/dosya.rs` | VeilisFS dosya sistemi |
-| `src/duzenleyici.rs` | Tam ekran metin düzenleyici |
-| `src/fare.rs` | PS/2 fare sürücüsü |
-| `src/pci.rs` | PCI taraması (ekran kartını bulur) |
-| `src/grafik.rs` | Piksel modu (BGA) ve tuvale çizim: dikdörtgen, yazı |
-| `src/masaustu.rs` | Pencere yöneticisi: pencereler, görev çubuğu, fare imleci |
-| `src/gdt.rs` | GDT ve TSS: istisnalar için yedek stack |
-| `x86_64-veilis.json` | Derleme hedefi: işletim sistemi olmayan x86_64 |
-| `.cargo/config.toml` | `core` kütüphanesini kaynaktan derleme ve `cargo run` ayarları |
+| `src/main.rs` | `cargo run` başlatıcısı: imajı QEMU'da açar (`uefi` argümanıyla UEFI) |
+| `build.rs` | Çekirdeği önyükleyiciyle birleştirip BIOS ve UEFI imajlarını üretir |
+| `kernel/src/main.rs` | Çekirdeğin kaynak kodu (`entry_point!` başlangıç noktası) |
+| `kernel/src/vga.rs` | RAM'deki metin tablosu ve `print!` / `println!` makroları |
+| `kernel/src/seri.rs` | COM1 seri port yazıcısı |
+| `kernel/src/interrupts.rs` | Kesme tablosu (IDT), istisnalar, zamanlayıcı ve klavye |
+| `kernel/src/klavye.rs` | Türkçe Q klavye düzeni |
+| `kernel/src/kabuk.rs` | Komut satırı ve komutlar |
+| `kernel/src/memory.rs` | Sayfa tabloları ve fiziksel çerçeve dağıtıcı |
+| `kernel/src/allocator.rs` | Heap |
+| `kernel/src/fro/` | Fro dili: sözcük ayırıcı, derleyici ve sanal makine |
+| `kernel/src/ata.rs` | ATA disk sürücüsü |
+| `kernel/src/dosya.rs` | VeilisFS dosya sistemi |
+| `kernel/src/duzenleyici.rs` | Tam ekran metin düzenleyici |
+| `kernel/src/fare.rs` | PS/2 fare sürücüsü |
+| `kernel/src/grafik.rs` | Önyükleyicinin verdiği çerçeve belleği: zemin rengiyle doldurma |
+| `kernel/src/masaustu.rs` | Pencere yöneticisi (şimdilik derlemeye dahil değil) |
+| `kernel/src/gdt.rs` | GDT ve TSS: istisnalar için yedek stack |
+| `.cargo/config.toml` | Çekirdeği `build.rs`'e bağımlılık olarak vermek için gereken ayar |
 | `rust-toolchain.toml` | Kullanılacak Rust sürümü (nightly) |
 
 ## Teşekkür

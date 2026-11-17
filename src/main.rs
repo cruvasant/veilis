@@ -1,78 +1,32 @@
-// Standart kütüphaneyi (std) kullanma: altımızda dosya, ekran, bellek
-// yöneticisi sunan bir işletim sistemi yok. Yalnızca `core` var.
-#![no_std]
-// Normal `main` başlangıç noktasını kullanma: onu çağıracak bir çalışma
-// zamanı (runtime) yok. Başlangıç noktasını kendimiz tanımlıyoruz.
-#![no_main]
-// İstisna fonksiyonları için özel çağrı biçimi (henüz yalnızca nightly'de).
-#![feature(abi_x86_interrupt)]
+// `cargo run`: imajı QEMU'da açar. `cargo run -- uefi` UEFI imajını açar.
 
-// Heap'ten bellek isteyen türler (String, Vec, Box) için.
-extern crate alloc;
+use std::path::PathBuf;
+use std::process::Command;
 
-mod allocator;
-mod ata;
-mod dosya;
-mod duzenleyici;
-mod fare;
-mod fro;
-mod gdt;
-mod grafik;
-mod interrupts;
-mod kabuk;
-mod klavye;
-mod masaustu;
-mod memory;
-mod pci;
-mod vga;
+const UEFI_YAZILIMI: &str = "edk2-x86_64-code.fd";
 
-use bootloader::{BootInfo, entry_point};
-use core::panic::PanicInfo;
-use x86_64::VirtAddr;
-
-// Önyükleyici `_start`'a atlar; bu makro `_start`'ı bizim için yazar ve
-// fonksiyonumuza bellek haritasını (BootInfo) doğru türle verir.
-// `-> !`: bu fonksiyon asla geri dönmez (dönecek bir yer yok).
-entry_point!(cekirdek_main);
-
-fn cekirdek_main(boot_info: &'static BootInfo) -> ! {
-    vga::turkce_harfleri_yukle();
-    println!("Merhaba, ben Veilis");
-    println!("Sürüm {}", env!("CARGO_PKG_VERSION"));
-
-    gdt::init();
-    interrupts::init();
-
-    let fiziksel_ofset = VirtAddr::new(boot_info.physical_memory_offset);
-    grafik::ofset_ayarla(boot_info.physical_memory_offset);
-    let mut sayfalar = unsafe { memory::init(fiziksel_ofset) };
-    let mut cerceveler = unsafe { memory::CerceveDagitici::new(&boot_info.memory_map) };
-    allocator::init(&mut sayfalar, &mut cerceveler).expect("heap kurulamadı");
-
-    #[cfg(debug_assertions)]
-    fro::oz_denetim();
-
-    match dosya::hazirla() {
-        Ok(()) => println!("Veri diski hazır."),
-        Err(hata) => println!("Veri diski kullanılamıyor: {}", hata),
+// VEILIS_UEFI_YAZILIMI ile verilen yolda, yoksa PATH'teki QEMU'nun yanındaki share klasöründe aranır.
+fn uefi_yazilimi() -> PathBuf {
+    if let Some(yol) = std::env::var_os("VEILIS_UEFI_YAZILIMI") {
+        return yol.into();
     }
-    println!("Komutlar için 'yardım' yaz.\n");
-
-    kabuk::calistir(memory::kullanilabilir_bayt(&boot_info.memory_map))
+    std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .map(|klasor| klasor.join("share").join(UEFI_YAZILIMI))
+        .find(|yol| yol.exists())
+        .expect("UEFI yazılımı bulunamadı; VEILIS_UEFI_YAZILIMI ile edk2-x86_64-code.fd yolunu ver")
 }
 
-// Boş döngüde işlemciyi yormak yerine hlt ile bir sonraki kesmeye kadar uyutuyoruz.
-fn bekle() -> ! {
-    loop {
-        x86_64::instructions::hlt();
+fn main() {
+    let uefi = std::env::args().nth(1).is_some_and(|a| a == "uefi");
+    let mut qemu = Command::new("qemu-system-x86_64");
+    if uefi {
+        qemu.arg("-drive").arg(format!("if=pflash,format=raw,readonly=on,file={}", uefi_yazilimi().display()));
     }
-}
-
-// Bir panik (kurtarılamaz hata) olursa çağrılır. std olmadığı için
-// bunu kendimiz yazmak zorundayız. Hatayı ekrana basıp bekliyoruz.
-#[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    println!("{}", info);
-    masaustu::panikte_ciz();
-    bekle()
+    let imaj = if uefi { env!("UEFI_IMAJI") } else { env!("BIOS_IMAJI") };
+    qemu.arg("-drive").arg(format!("format=raw,file={imaj},if=ide,index=0"));
+    // İkinci disk: Fro dosyalarının saklandığı veri diski (oluşturmak için README'ye bakın).
+    qemu.args(["-drive", "format=raw,file=veri.img,if=ide,index=1"]);
+    // Hata ayıklama çıktısı bu terminale gelir.
+    qemu.args(["-serial", "stdio"]);
+    std::process::exit(qemu.status().expect("QEMU başlatılamadı").code().unwrap_or(1));
 }

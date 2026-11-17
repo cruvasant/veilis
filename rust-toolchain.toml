@@ -1,5 +1,6 @@
 # Bu klasörde hangi Rust araç zincirinin kullanılacağını söyler.
-# Nightly gerekli: core kütüphanesini kendimiz derlemek için (-Z build-std).
+# Nightly gerekli: çekirdeği build.rs'e yapı bağımlılığı olarak vermek için (-Z bindeps).
 [toolchain]
 channel = "nightly"
 components = ["rust-src", "llvm-tools-preview"]
+targets = ["x86_64-unknown-none"]

@@ -4,18 +4,11 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 
-[package.metadata.bootimage]
-# İkinci disk: Fro dosyalarının saklandığı veri diski (oluşturmak için README'ye bakın).
-run-args = ["-drive", "format=raw,file=veri.img,if=ide,index=1"]
-
-[dependencies]
-# BIOS ile açılıp çekirdeğimizi belleğe yükleyen önyükleyici.
-bootloader = { version = "0.9", features = ["map_physical_memory"] }
-linked_list_allocator = "0.10.6"
-pc-keyboard = "0.9.0"
-pic8259 = "0.11.0"
-spin = "0.12.3"
-x86_64 = "0.15.5"
+[build-dependencies]
+# Önyükleyici: BIOS ve UEFI disk imajlarını üretir.
+bootloader = "0.11"
+# Çekirdek, build.rs için bir yapı (artifact) bağımlılığı olarak çıplak donanım hedefine derlenir.
+kernel = { path = "kernel", artifact = "bin", target = "x86_64-unknown-none" }
 
 [profile.dev]
 # Hata ayıklama derlemesinde arayüz çizimi çok yavaş kalıyor.

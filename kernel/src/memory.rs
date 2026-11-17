@@ -3,7 +3,7 @@
 // Önyükleyici bütün fiziksel belleği `fiziksel_ofset` adresinden itibaren
 // eşledi, böylece sayfa tablolarını okuyup değiştirebiliyoruz.
 
-use bootloader::bootinfo::{MemoryMap, MemoryRegionType};
+use bootloader_api::info::{MemoryRegion, MemoryRegionKind};
 use x86_64::registers::control::Cr3;
 use x86_64::structures::paging::{FrameAllocator, OffsetPageTable, PageTable, PhysFrame, Size4KiB};
 use x86_64::{PhysAddr, VirtAddr};
@@ -23,7 +23,7 @@ pub unsafe fn init(fiziksel_ofset: VirtAddr) -> OffsetPageTable<'static> {
 // Boş RAM'i 4 KiB'lık çerçeveler halinde dağıtır.
 // shortcut: hiç geri almıyor; çerçeve boşaltmak gerekince serbest liste ekle.
 pub struct CerceveDagitici {
-    harita: &'static MemoryMap,
+    harita: &'static [MemoryRegion],
     // Şu an dağıtılan bölgenin sırası ve içindeki sonraki adres; her seferinde baştan saymamak için.
     bolge: usize,
     sonraki: u64,
@@ -32,7 +32,7 @@ pub struct CerceveDagitici {
 impl CerceveDagitici {
     /// # Safety
     /// Haritada "kullanılabilir" görünen bölgeler gerçekten boş olmalı.
-    pub unsafe fn new(harita: &'static MemoryMap) -> Self {
+    pub unsafe fn new(harita: &'static [MemoryRegion]) -> Self {
         #[cfg(debug_assertions)]
         oz_denetim(harita);
         let sonraki = kullanilabilir(harita).next().map_or(0, |(bas, _)| bas);
@@ -56,20 +56,20 @@ unsafe impl FrameAllocator<Size4KiB> for CerceveDagitici {
     }
 }
 
-pub fn kullanilabilir_bayt(harita: &MemoryMap) -> u64 {
+pub fn kullanilabilir_bayt(harita: &[MemoryRegion]) -> u64 {
     kullanilabilir(harita).map(|(bas, son)| son - bas).sum()
 }
 
-fn kullanilabilir(harita: &MemoryMap) -> impl Iterator<Item = (u64, u64)> + '_ {
+fn kullanilabilir(harita: &[MemoryRegion]) -> impl Iterator<Item = (u64, u64)> + '_ {
     harita
         .iter()
-        .filter(|bolge| bolge.region_type == MemoryRegionType::Usable)
-        .map(|bolge| (bolge.range.start_addr(), bolge.range.end_addr()))
+        .filter(|bolge| bolge.kind == MemoryRegionKind::Usable)
+        .map(|bolge| (bolge.start, bolge.end))
 }
 
 // Çerçeveler 4 KiB hizalı, artan sırada ve kullanılabilir bölgelerin içinde gelmeli.
 #[cfg(debug_assertions)]
-fn oz_denetim(harita: &'static MemoryMap) {
+fn oz_denetim(harita: &'static [MemoryRegion]) {
     let sonraki = kullanilabilir(harita).next().map_or(0, |(bas, _)| bas);
     let mut dagitici = CerceveDagitici { harita, bolge: 0, sonraki };
     let mut onceki = None;
