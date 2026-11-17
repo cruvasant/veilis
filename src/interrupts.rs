@@ -47,7 +47,13 @@ pub fn init() {
     })
     .load();
 
-    unsafe { PICS.lock().initialize() };
+    unsafe {
+        let mut pics = PICS.lock();
+        pics.initialize();
+        // Yalnızca zamanlayıcı (IRQ0) ve klavye (IRQ1) açık; fonksiyonu olmayan bir
+        // donanım kesmesi gelirse çekirdek çökerdi.
+        pics.write_masks(0b1111_1100, 0b1111_1111);
+    }
     x86_64::instructions::interrupts::enable();
 }
 

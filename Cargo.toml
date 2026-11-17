@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 
+[package.metadata.bootimage]
+# İkinci disk: Fro dosyalarının saklandığı veri diski (oluşturmak için README'ye bakın).
+run-args = ["-drive", "format=raw,file=veri.img,if=ide,index=1"]
+
 [dependencies]
 # BIOS ile açılıp çekirdeğimizi belleğe yükleyen önyükleyici.
 bootloader = { version = "0.9", features = ["map_physical_memory"] }

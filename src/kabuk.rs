@@ -6,7 +6,7 @@ use alloc::string::String;
 use spin::Mutex;
 use x86_64::instructions::interrupts;
 
-use crate::{fro, print, println, vga};
+use crate::{dosya, fro, print, println, vga};
 
 const KUYRUK_BOYUTU: usize = 32;
 // "> " ile birlikte bir ekran satırına sığsın.
@@ -60,6 +60,8 @@ pub fn calistir(toplam_ram: u64) -> ! {
     let mut fro: Option<fro::Ortam> = None;
     // Açık bir { bloğu varsa satırlar burada birikir, blok kapanınca çalışır.
     let mut fro_kod = String::new();
+    // Bu Fro oturumunda hatasız çalışan kod; "kaydet" bunu dosyaya yazar.
+    let mut fro_gecmis = String::new();
 
     print!("> ");
     loop {
@@ -67,22 +69,16 @@ pub fn calistir(toplam_ram: u64) -> ! {
             '\n' => {
                 println!();
                 match (&mut fro, satir.trim()) {
-                    (Some(_), "çık" | "cik") if fro_kod.is_empty() => fro = None,
                     (Some(ortam), _) => {
-                        fro_kod.push_str(&satir);
-                        fro_kod.push('\n');
-                        // shortcut: metin içindeki { } de sayılıyor; gerekirse sözcük ayırıcıya bırak.
-                        if fro_kod.matches('{').count() <= fro_kod.matches('}').count() {
-                            if let Err(hata) = ortam.calistir(&fro_kod, &mut |d| println!("{}", d)) {
-                                println!("Hata: {}", hata);
-                            }
-                            fro_kod.clear();
+                        if !fro_satiri(&satir, ortam, &mut fro_kod, &mut fro_gecmis) {
+                            fro = None;
                         }
                     }
                     (None, "fro") => {
                         println!("Fro {}. Çıkmak için 'çık' yaz.", env!("CARGO_PKG_VERSION"));
-                        println!("Çalışan döngüyü durdurmak için Ctrl+C.");
+                        println!("Durdurmak: Ctrl+C. Kaydetmek: kaydet <ad>. Açmak: yükle <ad>.");
                         fro = Some(fro::Ortam::new(crate::allocator::bos));
+                        fro_gecmis.clear();
                     }
                     (None, _) => komut(&satir, toplam_ram),
                 }
@@ -107,6 +103,46 @@ pub fn calistir(toplam_ram: u64) -> ! {
     }
 }
 
+// Fro modunda bir satırı işler. false dönerse Fro'dan çıkılır.
+fn fro_satiri(satir: &str, ortam: &mut fro::Ortam, kod: &mut String, gecmis: &mut String) -> bool {
+    // kaydet, yükle ve çık Fro'nun değil komut satırının işleri; blok ortasında geçerli değil.
+    if kod.is_empty() {
+        match satir.trim().split_once(' ') {
+            None if matches!(satir.trim(), "çık" | "cik") => return false,
+            Some(("kaydet", ad)) => {
+                match dosya::yaz(ad.trim(), gecmis.as_bytes()) {
+                    Ok(()) => println!("{} kaydedildi ({} bayt).", ad.trim(), gecmis.len()),
+                    Err(hata) => println!("Hata: {}", hata),
+                }
+                return true;
+            }
+            Some(("yükle" | "yukle", ad)) => {
+                match dosya::oku(ad.trim()) {
+                    Ok(veri) => fro_calistir(&String::from_utf8_lossy(&veri), ortam, gecmis),
+                    Err(hata) => println!("Hata: {}", hata),
+                }
+                return true;
+            }
+            _ => {}
+        }
+    }
+    kod.push_str(satir);
+    kod.push('\n');
+    // shortcut: metin içindeki { } de sayılıyor; gerekirse sözcük ayırıcıya bırak.
+    if kod.matches('{').count() <= kod.matches('}').count() {
+        fro_calistir(kod, ortam, gecmis);
+        kod.clear();
+    }
+    true
+}
+
+fn fro_calistir(kod: &str, ortam: &mut fro::Ortam, gecmis: &mut String) {
+    match ortam.calistir(kod, &mut |d| println!("{}", d)) {
+        Ok(()) => gecmis.push_str(kod),
+        Err(hata) => println!("Hata: {}", hata),
+    }
+}
+
 fn komut(satir: &str, toplam_ram: u64) {
     let (ad, geri_kalan) = satir.trim().split_once(' ').unwrap_or((satir.trim(), ""));
     match ad {
@@ -119,8 +155,24 @@ fn komut(satir: &str, toplam_ram: u64) {
             println!("  süre        ne kadar süredir açık olduğunu yazar");
             println!("  bellek      RAM ve heap kullanımını gösterir");
             println!("  fro         Fro dilini başlatır");
+            println!("  dosyalar    kayıtlı dosyaları listeler");
+            println!("  göster <ad> dosyanın içini yazar");
+            println!("  sil <ad>    dosyayı siler");
             println!("  yaz <metin> yazdığın metni geri yazar");
         }
+        "dosyalar" => match dosya::listele() {
+            Ok(liste) if liste.is_empty() => println!("Henüz dosya yok."),
+            Ok(liste) => liste.iter().for_each(|(ad, boyut)| println!("  {:<20} {} bayt", ad, boyut)),
+            Err(hata) => println!("Hata: {}", hata),
+        },
+        "göster" | "goster" => match dosya::oku(geri_kalan.trim()) {
+            Ok(veri) => print!("{}", String::from_utf8_lossy(&veri)),
+            Err(hata) => println!("Hata: {}", hata),
+        },
+        "sil" => match dosya::sil(geri_kalan.trim()) {
+            Ok(()) => println!("{} silindi.", geri_kalan.trim()),
+            Err(hata) => println!("Hata: {}", hata),
+        },
         "temizle" => vga::temizle(),
         "sürüm" | "surum" => println!("Veilis {}", env!("CARGO_PKG_VERSION")),
         "süre" | "sure" => {

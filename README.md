@@ -3,13 +3,14 @@
 Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 Çekirdeği (kernel) Rust ile sıfırdan yazılıyor.
 
-> **Durum:** Aşama 8. Çekirdek açılıyor, işlemci istisnalarını yakalıyor, belleği sayfalarla
-> yönetiyor, Türkçe klavyeyle kullanılan bir komut satırı ve Fro dilinin ilk sürümünü sunuyor.
+> **Durum:** Aşama 9. Çekirdek açılıyor, işlemci istisnalarını yakalıyor, belleği sayfalarla
+> yönetiyor, Türkçe klavyeyle kullanılan bir komut satırı, Fro dilini ve diske dosya kaydetmeyi sunuyor.
 > Henüz günlük kullanıma uygun değildir; bir öğrenme ve geliştirme projesidir.
 
 ## Neler var?
 
 - `no_std` ve `no_main` ile yazılmış bağımsız (freestanding) bir Rust çekirdeği
+- `bootloader` 0.9 ile BIOS üzerinden önyükleme, QEMU sanal makinesinde çalıştırma
 - VGA metin tamponu üzerinden ekrana yazı: `print!` / `println!`, satır kaydırma
 - Panik olduğunda hata mesajını ekrana basma
 - IDT ile işlemci istisnalarını yakalama: breakpoint ve double fault
@@ -18,7 +19,9 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 - Türkçe Q klavye düzeni (Shift, Caps Lock, AltGr) ve VGA yazı tipine eklenen ı, İ, ş, Ş, ğ, Ğ
 - Sayfalama (paging), fiziksel çerçeve dağıtıcı ve 1 MiB heap (`String`, `Vec`, `Box`)
 - Page fault yakalama
-- Basit komut satırı: `yardım`, `temizle`, `sürüm`, `süre`, `bellek`, `yaz`, `fro`
+- ATA disk sürücüsü ve basit bir dosya sistemi (VeilisFS): 32 dosya, dosya başına en fazla 8 KiB
+- Basit komut satırı: `yardım`, `temizle`, `sürüm`, `süre`, `bellek`, `yaz`, `fro`,
+  `dosyalar`, `göster`, `sil`
 - Fro dili: Türkçe anahtar kelimeli, bytecode'a derlenip sanal makinede çalışan bir dil
   (metin, liste, karşılaştırma, `eğer`, `döngü`, fonksiyonlar)
 
@@ -65,10 +68,11 @@ Desteklenenler:
   fonksiyonlar kendini çağırabilir (en fazla 200 iç içe çağrı)
 - Deyimler `;` ya da yeni satırla ayrılır; `{` açık kaldıkça satırlar birikir
 - Çalışan bir döngü Ctrl+C ile durdurulur
+- `kaydet <ad>`: o Fro oturumunda hatasız çalışan bütün kodu veri diskine kaydeder;
+  `yükle <ad>`: kaydedilen kodu çalıştırır (fonksiyonlar yeniden tanımlanır)
+
 Her satır önce sözcüklere ayrılır, sonra bytecode'a derlenir ve sanal makinede çalıştırılır;
 değişken adları derleme sırasında numaraya çevrildiği için çalışırken isim aranmaz.
-- `bootloader` 0.9 ile BIOS üzerinden önyükleme
-- QEMU sanal makinesinde çalıştırma
 
 ## Gereksinimler
 
@@ -93,8 +97,14 @@ Windows'ta bu klasör genellikle `C:\Program Files\qemu` olur.
 ```sh
 git clone <bu deponun adresi>
 cd veilis
+qemu-img create -f raw veri.img 1M
 cargo run
 ```
+
+`qemu-img` satırı yalnızca ilk seferde gerekir: Fro dosyalarının saklanacağı boş bir veri diski
+(`veri.img`) oluşturur. Veilis boş diski ilk açılışta kendisi biçimlendirir; içinde başka veri olan
+bir diske ise güvenlik için hiç yazmaz. `veri.img` kişisel dosyalarını içerdiği için `.gitignore`
+ile depo dışında tutulur.
 
 `cargo run` önce çekirdeği derler, sonra disk imajını üretir ve QEMU'da açar.
 Açılan pencerede `Merhaba, ben Veilis` yazısı ve komut satırı görünür. Pencereye tıklayıp
@@ -120,6 +130,8 @@ cargo bootimage
 | `src/memory.rs` | Sayfa tabloları ve fiziksel çerçeve dağıtıcı |
 | `src/allocator.rs` | Heap |
 | `src/fro/` | Fro dili: sözcük ayırıcı, derleyici ve sanal makine |
+| `src/ata.rs` | ATA disk sürücüsü |
+| `src/dosya.rs` | VeilisFS dosya sistemi |
 | `src/gdt.rs` | GDT ve TSS: istisnalar için yedek stack |
 | `x86_64-veilis.json` | Derleme hedefi: işletim sistemi olmayan x86_64 |
 | `.cargo/config.toml` | `core` kütüphanesini kaynaktan derleme ve `cargo run` ayarları |

@@ -11,6 +11,8 @@
 extern crate alloc;
 
 mod allocator;
+mod ata;
+mod dosya;
 mod fro;
 mod gdt;
 mod interrupts;
@@ -44,6 +46,10 @@ fn cekirdek_main(boot_info: &'static BootInfo) -> ! {
     #[cfg(debug_assertions)]
     fro::oz_denetim();
 
+    match dosya::hazirla() {
+        Ok(()) => println!("Veri diski hazır."),
+        Err(hata) => println!("Veri diski kullanılamıyor: {}", hata),
+    }
     println!("Komutlar için 'yardım' yaz.\n");
 
     kabuk::calistir(memory::kullanilabilir_bayt(&boot_info.memory_map))
