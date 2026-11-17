@@ -6,7 +6,7 @@ use alloc::string::String;
 use spin::Mutex;
 use x86_64::instructions::interrupts;
 
-use crate::{dosya, fro, print, println, vga};
+use crate::{dosya, fro, grafik, masaustu, print, println, vga};
 
 // Karakter olmayan tuşlar için Unicode'un "özel kullanım" bölgesinden kodlar.
 pub const YUKARI: char = '\u{e000}';
@@ -46,6 +46,12 @@ pub fn sonraki_tus() -> char {
     loop {
         // Kesmeleri kapatıp bakıyoruz; sıra boşsa "kesmeleri aç ve uyu" tek adımda
         // yapılır, böylece arada gelen bir tuşu kaçırmayız.
+        // shortcut: ekran yalnızca tuş beklerken güncellenir, uzun süren bir Fro işi bitene kadar görüntü donar, gerekirse çizimi ayrı bir göreve taşı
+        if masaustu::acik() {
+            masaustu::guncelle();
+        } else if vga::kirli_al() {
+            grafik::konsol_ciz();
+        }
         interrupts::disable();
         let mut k = TUSLAR.lock();
         if k.adet > 0 {
@@ -168,7 +174,7 @@ fn komut(satir: &str, toplam_ram: u64) {
             println!("  göster <ad> dosyanın içini yazar");
             println!("  düzenle <ad> dosyayı düzenleyicide açar (yoksa oluşturur)");
             println!("  sil <ad>    dosyayı siler");
-            println!("  arayüz      masaüstüne geçer (henüz hazır değil)");
+            println!("  arayüz      masaüstüne geçer (geri dönüş yok)");
             println!("  yaz <metin> yazdığın metni geri yazar");
         }
         "dosyalar" => match dosya::listele() {
@@ -191,7 +197,12 @@ fn komut(satir: &str, toplam_ram: u64) {
             Ok(()) => println!("{} silindi.", geri_kalan.trim()),
             Err(hata) => println!("Hata: {}", hata),
         },
-        "arayüz" | "arayuz" => println!("Arayüz bu sürümde henüz hazır değil."),
+        "arayüz" | "arayuz" if masaustu::acik() => println!("Arayüz zaten açık."),
+        "arayüz" | "arayuz" => {
+            if let Err(hata) = masaustu::ac() {
+                println!("Hata: {}", hata);
+            }
+        }
         "temizle" => vga::temizle(),
         "sürüm" | "surum" => println!("Veilis {}", env!("CARGO_PKG_VERSION")),
         "süre" | "sure" => {

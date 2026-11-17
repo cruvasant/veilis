@@ -26,6 +26,8 @@ fn main() {
     qemu.arg("-drive").arg(format!("format=raw,file={imaj},if=ide,index=0"));
     // İkinci disk: Fro dosyalarının saklandığı veri diski (oluşturmak için README'ye bakın).
     qemu.args(["-drive", "format=raw,file=veri.img,if=ide,index=1"]);
+    // Büyük ekranlarda masaüstünün çizim tuvali için bol bellek.
+    qemu.args(["-m", "256M"]);
     // Hata ayıklama çıktısı bu terminale gelir.
     qemu.args(["-serial", "stdio"]);
     std::process::exit(qemu.status().expect("QEMU başlatılamadı").code().unwrap_or(1));

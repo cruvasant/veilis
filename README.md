@@ -3,9 +3,9 @@
 Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 Çekirdeği (kernel) Rust ile sıfırdan yazılıyor.
 
-> **Durum:** Aşama 11. Çekirdek açılıyor, işlemci istisnalarını yakalıyor, belleği sayfalarla
+> **Durum:** Aşama 12. Çekirdek açılıyor, işlemci istisnalarını yakalıyor, belleği sayfalarla
 > yönetiyor, Türkçe klavyeyle kullanılan bir komut satırı, Fro dilini, diske dosya kaydetmeyi ve
-> bir metin düzenleyiciyi sunuyor; BIOS ve UEFI ile açılıyor. Masaüstü, çerçeve belleğine taşınırken geçici olarak kapalı.
+> bir metin düzenleyiciyi ve fareyle kullanılan pencereli bir masaüstünü sunuyor; BIOS ve UEFI ile açılıyor.
 > Henüz günlük kullanıma uygun değildir; bir öğrenme ve geliştirme projesidir.
 
 ## Neler var?
@@ -13,21 +13,24 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 - `no_std` ve `no_main` ile yazılmış bağımsız (freestanding) bir Rust çekirdeği
 - `bootloader` 0.11 ile hem BIOS hem UEFI üzerinden önyükleme, QEMU sanal makinesinde çalıştırma
 - `print!` / `println!` ile yazı: RAM'deki 80x25 metin tablosuna ve seri porta (COM1) gider.
-  Ekrana çizim henüz yok; ekran önyükleyicinin verdiği çerçeve belleğiyle zemin renginden ibaret
+  Tablo, önyükleyicinin verdiği çerçeve belleğine gömülü 8x16 yazı tipiyle çizilir (VGA metin
+  modu gerekmez); seri port gerçek donanımda hata ayıklamak için kullanılır
 - Panik olduğunda hata mesajını ekrana basma
 - IDT ile işlemci istisnalarını yakalama: breakpoint ve double fault
 - GDT ve TSS ile double fault için ayrı stack, böylece stack taşması da yakalanıyor
 - PIC üzerinden donanım kesmeleri: zamanlayıcı ve klavye
 - Türkçe Q klavye düzeni (Shift, Caps Lock, AltGr)
-- Sayfalama (paging), fiziksel çerçeve dağıtıcı ve 16 MiB heap (`String`, `Vec`, `Box`)
+- Sayfalama (paging), fiziksel çerçeve dağıtıcı ve 64 MiB heap (`String`, `Vec`, `Box`)
 - Page fault yakalama
 - ATA disk sürücüsü ve basit bir dosya sistemi (VeilisFS): 32 dosya, dosya başına en fazla 8 KiB
 - Basit komut satırı: `yardım`, `temizle`, `sürüm`, `süre`, `bellek`, `yaz`, `fro`,
   `dosyalar`, `göster`, `düzenle`, `sil`
 - Tam ekran metin düzenleyici (`düzenle <ad>`): ok tuşları, Home/End, Backspace/Delete,
   Ctrl+S ile kaydetme, Esc ile çıkış; kaydedilmemiş değişiklik varsa çıkmadan önce uyarır
-- Masaüstü (`src/masaustu.rs`): şimdilik devre dışı; önyükleyicinin çerçeve belleğine taşınana kadar
-  `arayüz` komutu "henüz hazır değil" der
+- Masaüstü (`arayüz` komutu): firmanın verdiği çerçeve belleğinde, her çözünürlükte (en az
+  800x600), görev çubuğu ve saat, PS/2 fare, tıklayınca öne gelen ve başlık çubuğundan sürüklenen
+  pencereler. Komut satırı, Fro ve düzenleyici bir terminal penceresinin içinde çalışır; çizim önce
+  RAM'deki bir tuvale yapılır, sonra tek seferde ekrana kopyalanır
 - Fro dili: Türkçe anahtar kelimeli, bytecode'a derlenip sanal makinede çalışan bir dil
   (metin, liste, karşılaştırma, `eğer`, `döngü`, fonksiyonlar)
 
@@ -117,9 +120,9 @@ QEMU'da açar. UEFI imajını açmak için:
 cargo run -- uefi
 ```
 
-Ekran şimdilik yalnızca zemin rengiyle dolar; yazılar `cargo run` komutunun çalıştığı terminale
-seri port (COM1) üzerinden gelir. Komut satırı QEMU penceresindeki klavyeyle kullanılır
-(pencereye tıklayıp `yardım` yazın), çıktısı terminalde görünür.
+Açılan pencerede komut satırı görünür; `yardım` yazarak komutları görebilirsiniz. Ekrana
+yazılan her şey `cargo run` komutunun çalıştığı terminale de seri port (COM1) üzerinden gelir.
+QEMU'ya 256 MB bellek verilir (büyük ekranlarda masaüstü tuvali için).
 
 İmajlar `target/veilis-bios.img` ve `target/veilis-uefi.img` olarak yazılır. Gerçek bir makinede
 denemek için bu dosyalardan birini USB belleğe yazabilirsiniz (içindekiler silinir).
@@ -143,11 +146,16 @@ denemek için bu dosyalardan birini USB belleğe yazabilirsiniz (içindekiler si
 | `kernel/src/dosya.rs` | VeilisFS dosya sistemi |
 | `kernel/src/duzenleyici.rs` | Tam ekran metin düzenleyici |
 | `kernel/src/fare.rs` | PS/2 fare sürücüsü |
-| `kernel/src/grafik.rs` | Önyükleyicinin verdiği çerçeve belleği: zemin rengiyle doldurma |
-| `kernel/src/masaustu.rs` | Pencere yöneticisi (şimdilik derlemeye dahil değil) |
+| `kernel/src/grafik.rs` | Çerçeve belleği: konsol çizimi, RAM tuvali ve ekrana kopyalama |
+| `kernel/src/yazitipi.rs` | Gömülü 8x16 ekran yazı tipi |
+| `kernel/src/masaustu.rs` | Pencere yöneticisi: pencereler, görev çubuğu, fare imleci |
 | `kernel/src/gdt.rs` | GDT ve TSS: istisnalar için yedek stack |
 | `.cargo/config.toml` | Çekirdeği `build.rs`'e bağımlılık olarak vermek için gereken ayar |
 | `rust-toolchain.toml` | Kullanılacak Rust sürümü (nightly) |
+
+## Gerçek bilgisayarda deneme
+
+Yakında.
 
 ## Teşekkür
 

@@ -13,3 +13,7 @@ kernel = { path = "kernel", artifact = "bin", target = "x86_64-unknown-none" }
 [profile.dev]
 # Hata ayıklama derlemesinde arayüz çizimi çok yavaş kalıyor.
 opt-level = 1
+
+[profile.dev.build-override]
+# Çekirdek build.rs bağımlılığı olarak derlendiği için yukarıdaki opt-level ona uygulanmaz; burada veriyoruz.
+opt-level = 1

@@ -7,12 +7,10 @@ use alloc::vec;
 use alloc::vec::Vec;
 use spin::Mutex;
 
-use crate::grafik::{self, Ekran, GENISLIK, YUKSEKLIK};
+use crate::grafik::{self, Tuval, VGA_RENKLERI};
 use crate::vga::{self, GENISLIK as SUTUN, YUKSEKLIK as SATIR};
 use crate::{fare, interrupts};
 
-const EKRAN_G: i32 = GENISLIK as i32;
-const EKRAN_Y: i32 = YUKSEKLIK as i32;
 const GOREV_CUBUGU: i32 = 32;
 const BASLIK: i32 = 24;
 // Pencere sürüklenirken ekranda en az bu kadarı görünür kalır.
@@ -27,13 +25,6 @@ const BEYAZ: u32 = 0x00ff_ffff;
 const KAPAT: u32 = 0x00c0_3030;
 const KAGIT: u32 = 0x00e8_e8e8;
 const MUREKKEP: u32 = 0x0010_1010;
-
-// VGA'nın 16 rengi: 0 siyah, 1 mavi, 2 yeşil, 3 camgöbeği, 4 kırmızı, 5 mor, 6 kahverengi,
-// 7 açık gri, sonra aynı sırayla parlak olanlar.
-const VGA_RENKLERI: [u32; 16] = [
-    0x0000_0000, 0x0000_00aa, 0x0000_aa00, 0x0000_aaaa, 0x00aa_0000, 0x00aa_00aa, 0x00aa_5500, 0x00aa_aaaa,
-    0x0055_5555, 0x0055_55ff, 0x0055_ff55, 0x0055_ffff, 0x00ff_5555, 0x00ff_55ff, 0x00ff_ff55, 0x00ff_ffff,
-];
 
 // Fare oku: # çerçeve, . iç.
 const OK: [&str; 16] = [
@@ -85,8 +76,7 @@ impl Pencere {
 }
 
 struct Masaustu {
-    ekran: Ekran,
-    tuval: Vec<u32>,
+    tuval: Tuval,
     // Arkadan öne doğru; sonuncusu odaktaki pencere.
     pencereler: Vec<Pencere>,
     // Sürüklenen pencerede farenin başlık köşesine uzaklığı.
@@ -104,18 +94,17 @@ pub fn acik() -> bool {
 }
 
 pub fn ac() -> Result<(), &'static str> {
-    // Mod değişince metin belleği bozulabilir; içeriği önceden alıyoruz.
-    let mut metin = [0u16; SUTUN * SATIR];
-    vga::goruntu(&mut metin);
-    let ekran = grafik::baslat()?;
-    vga::ram_tamponuna_gec(metin);
-    fare::sinir_ayarla(EKRAN_G, EKRAN_Y);
+    let (g, y) = grafik::boyut().ok_or("Ekran bulunamadı.")?;
+    if g < 800 || y < 600 {
+        return Err("Masaüstü için en az 800x600 ekran gerekli.");
+    }
+    let tuval = Tuval::yeni(g, y)?;
+    fare::sinir_ayarla(g as i32, y as i32);
 
     let mut masaustu = Masaustu {
-        ekran,
-        tuval: vec![0; GENISLIK * YUKSEKLIK],
+        tuval,
         pencereler: vec![
-            Pencere { tur: Tur::Hakkinda, baslik: "Veilis hakkında", x: 620, y: 160, g: 320, h: 96 },
+            Pencere { tur: Tur::Hakkinda, baslik: "Veilis hakkında", x: g as i32 - 360, y: 160, g: 320, h: 96 },
             Pencere { tur: Tur::Terminal, baslik: "Terminal", x: 40, y: 40, g: (SUTUN * 8) as i32, h: (SATIR * 16) as i32 },
         ],
         surukle: None,
@@ -137,12 +126,11 @@ pub fn guncelle() {
 
 // Panikte son bir kez çizer ki hata mesajı terminal penceresinde görünsün. Panik kilit
 // tutulurken olduysa beklemek kilitlenmek olurdu; o zaman vazgeçiyoruz.
-pub fn panikte_ciz() {
-    if let Some(mut kilit) = MASAUSTU.try_lock() {
-        if let Some(m) = kilit.as_mut() {
-            m.ciz();
-        }
-    }
+pub fn panikte_ciz() -> bool {
+    let Some(mut kilit) = MASAUSTU.try_lock() else { return false };
+    let Some(m) = kilit.as_mut() else { return false };
+    m.ciz();
+    true
 }
 
 impl Masaustu {
@@ -166,8 +154,8 @@ impl Masaustu {
         if f.sol && !self.sol_basili {
             self.tikla(f.x, f.y);
         } else if let (true, Some((dx, dy)), Some(p)) = (f.sol, self.surukle, self.pencereler.last_mut()) {
-            p.x = (f.x - dx).clamp(EN_AZ_GORUNEN - p.g, EKRAN_G - EN_AZ_GORUNEN);
-            p.y = (f.y - dy).clamp(0, EKRAN_Y - GOREV_CUBUGU - BASLIK);
+            p.x = (f.x - dx).clamp(EN_AZ_GORUNEN - p.g, self.tuval.g - EN_AZ_GORUNEN);
+            p.y = (f.y - dy).clamp(0, self.tuval.y - GOREV_CUBUGU - BASLIK);
         }
         if !f.sol {
             self.surukle = None;
@@ -191,8 +179,8 @@ impl Masaustu {
     }
 
     fn ciz(&mut self) {
-        let tuval = &mut self.tuval[..];
-        grafik::dikdortgen(tuval, 0, 0, EKRAN_G, EKRAN_Y, ZEMIN);
+        let tuval = &mut self.tuval;
+        tuval.dikdortgen(0, 0, tuval.g, tuval.y, ZEMIN);
         let odak = self.pencereler.len() - 1;
         for (sira, pencere) in self.pencereler.iter().enumerate() {
             pencere_ciz(tuval, pencere, sira == odak);
@@ -202,55 +190,55 @@ impl Masaustu {
         for (satir, desen) in OK.iter().enumerate() {
             for (sutun, c) in desen.chars().enumerate() {
                 match c {
-                    '#' => grafik::piksel(tuval, f.x + sutun as i32, f.y + satir as i32, 0),
-                    '.' => grafik::piksel(tuval, f.x + sutun as i32, f.y + satir as i32, BEYAZ),
+                    '#' => tuval.piksel(f.x + sutun as i32, f.y + satir as i32, 0),
+                    '.' => tuval.piksel(f.x + sutun as i32, f.y + satir as i32, BEYAZ),
                     _ => {}
                 }
             }
         }
-        self.ekran.kopyala(tuval);
+        tuval.ekrana_kopyala();
     }
 }
 
-fn pencere_ciz(tuval: &mut [u32], p: &Pencere, odakli: bool) {
-    grafik::dikdortgen(tuval, p.x - 1, p.y - 1, p.g + 2, BASLIK + p.h + 2, KENAR);
-    grafik::dikdortgen(tuval, p.x, p.y, p.g, BASLIK, if odakli { ODAKLI } else { ODAKSIZ });
-    grafik::metin(tuval, p.x + 8, p.y + 4, p.baslik, BEYAZ, None);
+fn pencere_ciz(tuval: &mut Tuval, p: &Pencere, odakli: bool) {
+    tuval.dikdortgen(p.x - 1, p.y - 1, p.g + 2, BASLIK + p.h + 2, KENAR);
+    tuval.dikdortgen(p.x, p.y, p.g, BASLIK, if odakli { ODAKLI } else { ODAKSIZ });
+    tuval.metin(p.x + 8, p.y + 4, p.baslik, BEYAZ, None);
     if p.tur == Tur::Hakkinda {
-        grafik::dikdortgen(tuval, p.x + p.g - 22, p.y + 4, 16, 16, KAPAT);
-        grafik::metin(tuval, p.x + p.g - 18, p.y + 4, "X", BEYAZ, None);
+        tuval.dikdortgen(p.x + p.g - 22, p.y + 4, 16, 16, KAPAT);
+        tuval.metin(p.x + p.g - 18, p.y + 4, "X", BEYAZ, None);
     }
 
     let icerik_y = p.y + BASLIK;
     match p.tur {
         Tur::Terminal => konsol_ciz(tuval, p.x, icerik_y),
         Tur::Hakkinda => {
-            grafik::dikdortgen(tuval, p.x, icerik_y, p.g, p.h, KAGIT);
-            grafik::metin(tuval, p.x + 16, icerik_y + 16, &format!("Veilis {}", env!("CARGO_PKG_VERSION")), MUREKKEP, None);
-            grafik::metin(tuval, p.x + 16, icerik_y + 48, "Fro dili ve tam ekran düzenleyici", MUREKKEP, None);
+            tuval.dikdortgen(p.x, icerik_y, p.g, p.h, KAGIT);
+            tuval.metin(p.x + 16, icerik_y + 16, &format!("Veilis {}", env!("CARGO_PKG_VERSION")), MUREKKEP, None);
+            tuval.metin(p.x + 16, icerik_y + 48, "Fro dili ve tam ekran düzenleyici", MUREKKEP, None);
         }
     }
 }
 
 // VGA hücresi: alt bayt karakter, üst bayt renk (alt 4 bit yazı, üst 4 bit zemin).
-fn konsol_ciz(tuval: &mut [u32], x: i32, y: i32) {
+fn konsol_ciz(tuval: &mut Tuval, x: i32, y: i32) {
     let mut hucreler = [0u16; SUTUN * SATIR];
     let (imlec_satir, imlec_sutun, imlec_gorunur) = vga::goruntu(&mut hucreler);
     for (sira, hucre) in hucreler.iter().enumerate() {
         let renk = (hucre >> 8) as usize;
         let (hx, hy) = (x + (sira % SUTUN) as i32 * 8, y + (sira / SUTUN) as i32 * 16);
-        grafik::harf(tuval, hx, hy, *hucre as u8, VGA_RENKLERI[renk & 0xf], Some(VGA_RENKLERI[renk >> 4]));
+        tuval.harf(hx, hy, *hucre as u8, VGA_RENKLERI[renk & 0xf], Some(VGA_RENKLERI[renk >> 4]));
     }
     if imlec_gorunur {
         let (hx, hy) = (x + imlec_sutun as i32 * 8, y + imlec_satir as i32 * 16);
-        grafik::dikdortgen(tuval, hx, hy + 14, 8, 2, BEYAZ);
+        tuval.dikdortgen(hx, hy + 14, 8, 2, BEYAZ);
     }
 }
 
-fn gorev_cubugu_ciz(tuval: &mut [u32], saniye: u64) {
-    let y = EKRAN_Y - GOREV_CUBUGU;
-    grafik::dikdortgen(tuval, 0, y, EKRAN_G, GOREV_CUBUGU, CUBUK);
-    grafik::dikdortgen(tuval, 8, y + 4, 72, 24, ODAKLI);
-    grafik::metin(tuval, 16, y + 8, "Veilis", BEYAZ, None);
-    grafik::metin(tuval, EKRAN_G - 52, y + 8, &format!("{:02}:{:02}", saniye / 60, saniye % 60), BEYAZ, None);
+fn gorev_cubugu_ciz(tuval: &mut Tuval, saniye: u64) {
+    let y = tuval.y - GOREV_CUBUGU;
+    tuval.dikdortgen(0, y, tuval.g, GOREV_CUBUGU, CUBUK);
+    tuval.dikdortgen(8, y + 4, 72, 24, ODAKLI);
+    tuval.metin(16, y + 8, "Veilis", BEYAZ, None);
+    tuval.metin(tuval.g - 52, y + 8, &format!("{:02}:{:02}", saniye / 60, saniye % 60), BEYAZ, None);
 }

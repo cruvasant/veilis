@@ -21,9 +21,11 @@ mod grafik;
 mod interrupts;
 mod kabuk;
 mod klavye;
+mod masaustu;
 mod memory;
 mod seri;
 mod vga;
+mod yazitipi;
 
 use bootloader_api::config::Mapping;
 use bootloader_api::{BootInfo, BootloaderConfig, entry_point};
@@ -73,6 +75,7 @@ fn cekirdek_main(boot_info: &'static mut BootInfo) -> ! {
     }
     println!("Komutlar için 'yardım' yaz.\n");
 
+    grafik::konsol_ciz();
     kabuk::calistir(memory::kullanilabilir_bayt(bolgeler))
 }
 
@@ -88,5 +91,8 @@ fn bekle() -> ! {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     println!("{}", info);
+    if !masaustu::panikte_ciz() {
+        grafik::konsol_ciz();
+    }
     bekle()
 }
