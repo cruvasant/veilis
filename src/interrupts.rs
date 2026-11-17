@@ -6,7 +6,8 @@ use pc_keyboard::{DecodedKey, HandleControl, PS2Keyboard, ScancodeSet1};
 use pic8259::ChainedPics;
 use spin::{Mutex, Once};
 use x86_64::instructions::port::Port;
-use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
+use x86_64::registers::control::Cr2;
+use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
 use core::sync::atomic::{AtomicU64, Ordering};
 
@@ -38,6 +39,7 @@ pub fn init() {
                 .set_handler_fn(double_fault)
                 .set_stack_index(crate::gdt::DOUBLE_FAULT_IST);
         }
+        idt.page_fault.set_handler_fn(page_fault);
         idt[ZAMANLAYICI].set_handler_fn(zamanlayici);
         idt[KLAVYE].set_handler_fn(klavye);
         idt
@@ -46,6 +48,17 @@ pub fn init() {
 
     unsafe { PICS.lock().initialize() };
     x86_64::instructions::interrupts::enable();
+}
+
+// Sayfa tablosunda karşılığı olmayan (ya da izin verilmeyen) bir adrese erişince gelir.
+// İşlemci, sorunlu adresi CR2 yazmacına koyar.
+extern "x86-interrupt" fn page_fault(frame: InterruptStackFrame, hata: PageFaultErrorCode) {
+    panic!(
+        "ISTISNA: page fault\nAdres: {:?}\nSebep: {:?}\n{:#?}",
+        Cr2::read(),
+        hata,
+        frame
+    );
 }
 
 static TIK: AtomicU64 = AtomicU64::new(0);

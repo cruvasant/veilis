@@ -2,6 +2,7 @@
 // sıradan alıp satırı biriktiririz, Enter gelince komutu çalıştırırız.
 // Kesme içinde uzun iş yapmamak için ikisini ayırıyoruz.
 
+use alloc::string::String;
 use spin::Mutex;
 use x86_64::instructions::interrupts;
 
@@ -52,35 +53,26 @@ fn sonraki_tus() -> char {
     }
 }
 
-pub fn calistir() -> ! {
-    // Satırı UTF-8 bayt olarak tutuyoruz; Türkçe harfler 2 bayt.
-    let mut tampon = [0u8; EN_FAZLA_KARAKTER * 4];
-    let mut uzunluk = 0;
-    let mut karakter = 0;
+pub fn calistir(toplam_ram: u64) -> ! {
+    // Satır artık heap'te: String gerektiği kadar büyür.
+    let mut satir = String::new();
 
     print!("> ");
     loop {
         match sonraki_tus() {
             '\n' => {
                 println!();
-                komut(core::str::from_utf8(&tampon[..uzunluk]).unwrap_or(""));
-                uzunluk = 0;
-                karakter = 0;
+                komut(&satir, toplam_ram);
+                satir.clear();
                 print!("> ");
             }
             '\u{8}' => {
-                if let Some(son) = core::str::from_utf8(&tampon[..uzunluk])
-                    .ok()
-                    .and_then(|s| s.chars().next_back())
-                {
-                    uzunluk -= son.len_utf8();
-                    karakter -= 1;
+                if satir.pop().is_some() {
                     print!("\u{8}");
                 }
             }
-            c if !c.is_control() && karakter < EN_FAZLA_KARAKTER => {
-                uzunluk += c.encode_utf8(&mut tampon[uzunluk..]).len();
-                karakter += 1;
+            c if !c.is_control() && satir.chars().count() < EN_FAZLA_KARAKTER => {
+                satir.push(c);
                 print!("{}", c);
             }
             _ => {}
@@ -88,7 +80,7 @@ pub fn calistir() -> ! {
     }
 }
 
-fn komut(satir: &str) {
+fn komut(satir: &str, toplam_ram: u64) {
     let (ad, geri_kalan) = satir.trim().split_once(' ').unwrap_or((satir.trim(), ""));
     match ad {
         "" => {}
@@ -98,6 +90,7 @@ fn komut(satir: &str) {
             println!("  temizle     ekranı temizler");
             println!("  sürüm       Veilis sürümünü yazar");
             println!("  süre        ne kadar süredir açık olduğunu yazar");
+            println!("  bellek      RAM ve heap kullanımını gösterir");
             println!("  yaz <metin> yazdığın metni geri yazar");
         }
         "temizle" => vga::temizle(),
@@ -105,6 +98,11 @@ fn komut(satir: &str) {
         "süre" | "sure" => {
             let sn = crate::interrupts::acik_kalma_saniye();
             println!("{} dakika {} saniyedir açık", sn / 60, sn % 60);
+        }
+        "bellek" => {
+            let (kullanilan, heap) = crate::allocator::kullanim();
+            println!("RAM:  {} MB kullanılabilir", toplam_ram / 1024 / 1024);
+            println!("Heap: {} / {} bayt kullanımda", kullanilan, heap);
         }
         "yaz" => println!("{}", geri_kalan.trim()),
         _ => println!("Bilinmeyen komut: {}. Komutlar için 'yardım' yaz.", ad),

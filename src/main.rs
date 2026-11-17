@@ -7,19 +7,27 @@
 // İstisna fonksiyonları için özel çağrı biçimi (henüz yalnızca nightly'de).
 #![feature(abi_x86_interrupt)]
 
+// Heap'ten bellek isteyen türler (String, Vec, Box) için.
+extern crate alloc;
+
+mod allocator;
 mod gdt;
 mod interrupts;
 mod kabuk;
 mod klavye;
+mod memory;
 mod vga;
 
+use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
+use x86_64::VirtAddr;
 
-// Önyükleyici çekirdeği belleğe yükleyince `_start` adlı fonksiyona atlar.
-// no_mangle: derleyici adı değiştirmesin, tam olarak `_start` kalsın.
+// Önyükleyici `_start`'a atlar; bu makro `_start`'ı bizim için yazar ve
+// fonksiyonumuza bellek haritasını (BootInfo) doğru türle verir.
 // `-> !`: bu fonksiyon asla geri dönmez (dönecek bir yer yok).
-#[unsafe(no_mangle)]
-pub extern "C" fn _start() -> ! {
+entry_point!(cekirdek_main);
+
+fn cekirdek_main(boot_info: &'static BootInfo) -> ! {
     vga::turkce_harfleri_yukle();
     println!("Merhaba, ben Veilis");
     println!("Sürüm {}", env!("CARGO_PKG_VERSION"));
@@ -27,9 +35,14 @@ pub extern "C" fn _start() -> ! {
     gdt::init();
     interrupts::init();
 
+    let fiziksel_ofset = VirtAddr::new(boot_info.physical_memory_offset);
+    let mut sayfalar = unsafe { memory::init(fiziksel_ofset) };
+    let mut cerceveler = unsafe { memory::CerceveDagitici::new(&boot_info.memory_map) };
+    allocator::init(&mut sayfalar, &mut cerceveler).expect("heap kurulamadı");
+
     println!("Komutlar için 'yardım' yaz.\n");
 
-    kabuk::calistir()
+    kabuk::calistir(memory::kullanilabilir_bayt(&boot_info.memory_map))
 }
 
 // Boş döngüde işlemciyi yormak yerine hlt ile bir sonraki kesmeye kadar uyutuyoruz.
