@@ -24,7 +24,8 @@ const KLAVYE: u8 = PIC_1 + 1;
 static PICS: Mutex<ChainedPics> = Mutex::new(unsafe { ChainedPics::new(PIC_1, PIC_2) });
 
 static KLAVYE_DURUMU: Mutex<PS2Keyboard<TurkceQ, ScancodeSet1>> = Mutex::new(
-    PS2Keyboard::new(ScancodeSet1::new(), TurkceQ, HandleControl::Ignore),
+    // MapLettersToUnicode: Ctrl+C gibi tuşlar kontrol karakterine dönüşür ('\u{3}').
+    PS2Keyboard::new(ScancodeSet1::new(), TurkceQ, HandleControl::MapLettersToUnicode),
 );
 
 static IDT: Once<InterruptDescriptorTable> = Once::new();
@@ -78,8 +79,11 @@ extern "x86-interrupt" fn klavye(_frame: InterruptStackFrame) {
     let kod: u8 = unsafe { Port::new(0x60).read() };
     let mut klavye = KLAVYE_DURUMU.lock();
     if let Ok(Some(olay)) = klavye.add_byte(kod) {
-        if let Some(DecodedKey::Unicode(c)) = klavye.process_keyevent(olay) {
-            crate::kabuk::tus_ekle(c);
+        match klavye.process_keyevent(olay) {
+            // Ctrl+C sıraya girmez: o an çalışan Fro kodunu hemen durdurmalı.
+            Some(DecodedKey::Unicode('\u{3}')) => crate::fro::DURDUR.store(true, Ordering::Relaxed),
+            Some(DecodedKey::Unicode(c)) => crate::kabuk::tus_ekle(c),
+            _ => {}
         }
     }
     // PIC'e "bitti" demezsek bir sonraki kesmeyi göndermez.

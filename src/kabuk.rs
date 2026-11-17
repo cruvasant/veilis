@@ -58,6 +58,8 @@ pub fn calistir(toplam_ram: u64) -> ! {
     let mut satir = String::new();
     // Some ise Fro modundayız; değişkenler oturum boyunca kalır.
     let mut fro: Option<fro::Ortam> = None;
+    // Açık bir { bloğu varsa satırlar burada birikir, blok kapanınca çalışır.
+    let mut fro_kod = String::new();
 
     print!("> ");
     loop {
@@ -65,19 +67,31 @@ pub fn calistir(toplam_ram: u64) -> ! {
             '\n' => {
                 println!();
                 match (&mut fro, satir.trim()) {
-                    (Some(_), "çık" | "cik") => fro = None,
-                    (Some(ortam), kod) => match ortam.calistir(kod) {
-                        Ok(degerler) => degerler.iter().for_each(|d| println!("{}", d)),
-                        Err(hata) => println!("Hata: {}", hata),
-                    },
+                    (Some(_), "çık" | "cik") if fro_kod.is_empty() => fro = None,
+                    (Some(ortam), _) => {
+                        fro_kod.push_str(&satir);
+                        fro_kod.push('\n');
+                        // shortcut: metin içindeki { } de sayılıyor; gerekirse sözcük ayırıcıya bırak.
+                        if fro_kod.matches('{').count() <= fro_kod.matches('}').count() {
+                            if let Err(hata) = ortam.calistir(&fro_kod, &mut |d| println!("{}", d)) {
+                                println!("Hata: {}", hata);
+                            }
+                            fro_kod.clear();
+                        }
+                    }
                     (None, "fro") => {
                         println!("Fro {}. Çıkmak için 'çık' yaz.", env!("CARGO_PKG_VERSION"));
+                        println!("Çalışan döngüyü durdurmak için Ctrl+C.");
                         fro = Some(fro::Ortam::new());
                     }
                     (None, _) => komut(&satir, toplam_ram),
                 }
                 satir.clear();
-                print!("{}", if fro.is_some() { "fro> " } else { "> " });
+                print!("{}", match &fro {
+                    None => "> ",
+                    Some(_) if fro_kod.is_empty() => "fro> ",
+                    Some(_) => "...> ",
+                });
             }
             '\u{8}' => {
                 if satir.pop().is_some() {

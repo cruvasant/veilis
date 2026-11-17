@@ -20,22 +20,34 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 - Page fault yakalama
 - Basit komut satırı: `yardım`, `temizle`, `sürüm`, `süre`, `bellek`, `yaz`, `fro`
 - Fro dili: Türkçe anahtar kelimeli, bytecode'a derlenip sanal makinede çalışan bir dil
+  (metin, karşılaştırma, `eğer`, `döngü`)
 
 ## Fro
 
 Fro, Veilis'in kendi programlama dili. Komut satırında `fro` yazarak başlatılır, `çık` ile kapanır.
-Şimdilik tam sayılarla hesap ve değişkenleri destekliyor:
 
 ```
-fro> a = 5
-fro> yaz a * (2 + 3)
-25
-fro> sonuç = a % 3
-fro> sonuç
-2
+fro> a = 7
+fro> eğer a > 3 { yaz "büyük" } değilse { yaz "küçük" }
+büyük
+fro> n = 3
+fro> döngü n > 0 {
+...>   yaz "kalan: " + n
+...>   n = n - 1
+...> }
+kalan: 3
+kalan: 2
+kalan: 1
 ```
 
-Desteklenenler: `+ - * / %`, parantezler, eksi işareti, değişken atama ve `yaz`.
+Desteklenenler:
+
+- Tam sayılar ve metinler (`"merhaba"`); metne `+` ile sayı ya da metin eklenebilir
+- `+ - * / %`, parantezler, eksi işareti
+- Karşılaştırma: `== != < > <= >=` (doğruysa 1, yanlışsa 0)
+- Değişken atama, `yaz`, `eğer` / `değilse` / `değilse eğer`, `döngü`
+- Deyimler `;` ya da yeni satırla ayrılır; `{` açık kaldıkça satırlar birikir
+- Çalışan bir döngü Ctrl+C ile durdurulur
 Her satır önce sözcüklere ayrılır, sonra bytecode'a derlenir ve sanal makinede çalıştırılır;
 değişken adları derleme sırasında numaraya çevrildiği için çalışırken isim aranmaz.
 - `bootloader` 0.9 ile BIOS üzerinden önyükleme
