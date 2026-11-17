@@ -44,14 +44,14 @@ pub fn tus_ekle(c: char) {
 
 pub fn sonraki_tus() -> char {
     loop {
-        // Kesmeleri kapatıp bakıyoruz; sıra boşsa "kesmeleri aç ve uyu" tek adımda
-        // yapılır, böylece arada gelen bir tuşu kaçırmayız.
         // shortcut: ekran yalnızca tuş beklerken güncellenir, uzun süren bir Fro işi bitene kadar görüntü donar, gerekirse çizimi ayrı bir göreve taşı
         if masaustu::acik() {
             masaustu::guncelle();
         } else if vga::kirli_al() {
             grafik::konsol_ciz();
         }
+        // Kesmeleri kapatıp bakıyoruz; sıra boşsa "kesmeleri aç ve uyu" tek adımda
+        // yapılır, böylece arada gelen bir tuşu kaçırmayız.
         interrupts::disable();
         let mut k = TUSLAR.lock();
         if k.adet > 0 {

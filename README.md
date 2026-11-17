@@ -4,8 +4,8 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 Çekirdeği (kernel) Rust ile sıfırdan yazılıyor.
 
 > **Durum:** Aşama 12. Çekirdek açılıyor, işlemci istisnalarını yakalıyor, belleği sayfalarla
-> yönetiyor, Türkçe klavyeyle kullanılan bir komut satırı, Fro dilini, diske dosya kaydetmeyi ve
-> bir metin düzenleyiciyi ve fareyle kullanılan pencereli bir masaüstünü sunuyor; BIOS ve UEFI ile açılıyor.
+> yönetiyor; Türkçe klavyeyle kullanılan bir komut satırı, Fro dili, diske dosya kaydetme, bir metin
+> düzenleyici ve fareyle kullanılan pencereli bir masaüstü sunuyor. BIOS ve UEFI ile açılıyor.
 > Henüz günlük kullanıma uygun değildir; bir öğrenme ve geliştirme projesidir.
 
 ## Neler var?
@@ -27,7 +27,7 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
   `dosyalar`, `göster`, `düzenle`, `sil`
 - Tam ekran metin düzenleyici (`düzenle <ad>`): ok tuşları, Home/End, Backspace/Delete,
   Ctrl+S ile kaydetme, Esc ile çıkış; kaydedilmemiş değişiklik varsa çıkmadan önce uyarır
-- Masaüstü (`arayüz` komutu): firmanın verdiği çerçeve belleğinde, her çözünürlükte (en az
+- Masaüstü (`arayüz` komutu): firmware'in verdiği çerçeve belleğinde, her çözünürlükte (en az
   800x600), görev çubuğu ve saat, PS/2 fare, tıklayınca öne gelen ve başlık çubuğundan sürüklenen
   pencereler. Komut satırı, Fro ve düzenleyici bir terminal penceresinin içinde çalışır; çizim önce
   RAM'deki bir tuvale yapılır, sonra tek seferde ekrana kopyalanır
@@ -124,8 +124,8 @@ Açılan pencerede komut satırı görünür; `yardım` yazarak komutları göre
 yazılan her şey `cargo run` komutunun çalıştığı terminale de seri port (COM1) üzerinden gelir.
 QEMU'ya 256 MB bellek verilir (büyük ekranlarda masaüstü tuvali için).
 
-İmajlar `target/veilis-bios.img` ve `target/veilis-uefi.img` olarak yazılır. Gerçek bir makinede
-denemek için bu dosyalardan birini USB belleğe yazabilirsiniz (içindekiler silinir).
+İmajlar `target/veilis-bios.img` ve `target/veilis-uefi.img` olarak yazılır. Gerçek bir
+bilgisayarda denemek için aşağıdaki bölüme bakın.
 
 ## Proje yapısı
 
@@ -155,12 +155,35 @@ denemek için bu dosyalardan birini USB belleğe yazabilirsiniz (içindekiler si
 
 ## Gerçek bilgisayarda deneme
 
-Yakında.
+> **Uyarı:** Bir imajı USB belleğe yazmak, bellekteki her şeyi siler. Yazmadan önce doğru diski
+> seçtiğinizden emin olun; yanlış diski seçmek o diskteki verileri geri dönüşsüz yok eder.
+> Veilis henüz yalnızca QEMU'da denenmiştir.
+
+1. `cargo build` ile imajları üretin. Yeni bilgisayarlar için `target/veilis-uefi.img`, eski
+   (BIOS / Legacy / CSM) bilgisayarlar için `target/veilis-bios.img` kullanın.
+2. İmajı USB belleğe ham olarak yazın. Windows'ta [Rufus](https://rufus.ie) ile: aygıt olarak USB
+   belleği, önyükleme seçimi olarak `.img` dosyasını seçin ve "DD imajı" olarak yazın.
+   Linux'ta: `sudo dd if=target/veilis-uefi.img of=/dev/sdX bs=4M status=progress && sync`
+   (`/dev/sdX` USB belleğin kendisi olmalı; `lsblk` ile kontrol edin).
+3. UEFI ile açacaksanız firmware ayarlarından Secure Boot'u kapatın; Veilis imzalı değildir.
+4. Bilgisayarın açılış menüsünden (çoğunlukla F12, F11, F8 ya da Esc) USB belleği seçin.
+
+Bilinen sınırlar:
+
+- Klavye ve fare için yalnızca PS/2 sürücüsü var. Dizüstü bilgisayarların dahili klavyesi
+  çoğunlukla PS/2 üzerinden bağlıdır. USB klavye ve fare, BIOS/CSM ile açılışta çoğu bilgisayarda
+  firmware'in eski aygıt desteği sayesinde çalışır; UEFI ile açılışta büyük ihtimalle çalışmaz.
+- Veri diski için yalnızca eski ATA (IDE) desteği var; modern SATA (AHCI) ve NVMe diskler
+  görülmez, dosya komutları "veri diski yok" der. Bu, gerçek diskinize hiç yazılmayacağı anlamına
+  da gelir.
+- Bilgisayarda seri port (COM1) varsa ekrandaki her şey oradan da 115200 baud ile çıkar; ekran
+  açılmazsa hata ayıklamak için kullanılabilir.
 
 ## Teşekkür
 
 Bu proje, Philipp Oppermann'ın
 [Writing an OS in Rust](https://os.phil-opp.com/) yazı dizisinden öğrenilerek başlatılmıştır.
+Ekran yazı tipi, kamu malı olan X11 misc-fixed 8x13 yazı tipinden üretilmiştir.
 
 ## Lisans
 
