@@ -1,0 +1,5 @@
+# Bu klasörde hangi Rust araç zincirinin kullanılacağını söyler.
+# Nightly gerekli: core kütüphanesini kendimiz derlemek için (-Z build-std).
+[toolchain]
+channel = "nightly"
+components = ["rust-src", "llvm-tools-preview"]

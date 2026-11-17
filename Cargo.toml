@@ -1,0 +1,9 @@
+[package]
+name = "veilis"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+# BIOS ile açılıp çekirdeğimizi belleğe yükleyen önyükleyici.
+bootloader = "0.9"
