@@ -1,14 +1,17 @@
 // 2. adım: sözcükleri sanal makinenin komutlarına (bytecode) çevirir.
 // Kurallar (dilbilgisi):
 //   program = deyim ((";" | yeni satır) deyim)*
-//   deyim   = ad "=" ifade | "yaz" ifade | eğer | "döngü" ifade blok
-//           | "fonksiyon" ad "(" [ad ("," ad)*] ")" blok | "döndür" ifade | ifade
+//   deyim   = ad "=" ifade | ad "[" ifade "]" "=" ifade | "yaz" ifade | eğer
+//           | "döngü" ifade blok | "fonksiyon" ad "(" [ad ("," ad)*] ")" blok
+//           | "döndür" ifade | ifade
 //   eğer    = "eğer" ifade blok ["değilse" (eğer | blok)]
 //   blok    = "{" program "}"
 //   ifade   = toplam [("==" | "!=" | "<" | ">" | "<=" | ">=") toplam]
 //   toplam  = terim  (("+" | "-") terim)*
 //   terim   = çarpan (("*" | "/" | "%") çarpan)*
-//   çarpan  = sayı | metin | ad | ad "(" [ifade ("," ifade)*] ")" | "-" çarpan | "(" ifade ")"
+//   çarpan  = birincil ("[" ifade "]")*
+//   birincil = sayı | metin | ad | ad "(" [ifade ("," ifade)*] ")" | "[" [ifade ("," ifade)*] "]"
+//            | "-" çarpan | "(" ifade ")"
 // Çarpma toplamadan önce yapılsın diye her kural bir alttakini çağırır.
 // Makine yığın (stack) ile çalışır: "2 + 3" -> Sayi(2), Sayi(3), Topla.
 // eğer ve döngü, atlama komutlarına dönüşür:
@@ -21,7 +24,10 @@ use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use super::makine::{Fonksiyon, Komut};
+use super::makine::{Fonksiyon, Komut, Yer};
+
+// Dilin içinde hazır gelen fonksiyonlar; aynı adla fonksiyon tanımlanamaz.
+const YERLESIK: [&str; 2] = ["ekle", "uzunluk"];
 use super::sozcuk::Sozcuk;
 
 struct Derleyici<'a, 'b> {
@@ -102,6 +108,25 @@ impl<'a> Derleyici<'a, '_> {
                 };
                 self.kod.push(komut);
             }
+            (Some(Sozcuk::Ad(ad)), Some(Sozcuk::KoseliAc)) => {
+                // "l[0] = 5" mi yoksa "l[0] + 1" gibi bir ifade mi? Önce atama gibi okuyup
+                // değilse geri sarıyoruz.
+                let (sira, kod_uzunlugu) = (self.sira, self.kod.len());
+                self.sira += 2;
+                self.ifade()?;
+                let ikinci = self.sozcukler.get(self.sira + 1).copied();
+                if self.sonraki() == Some(Sozcuk::KoseliKapa) && ikinci == Some(Sozcuk::Esittir) {
+                    self.sira += 2;
+                    self.ifade()?;
+                    let yer = self.degisken_yeri(ad)?;
+                    self.kod.push(Komut::IndeksAta(yer));
+                } else {
+                    self.sira = sira;
+                    self.kod.truncate(kod_uzunlugu);
+                    self.ifade()?;
+                    self.kod.push(Komut::Yaz);
+                }
+            }
             (Some(Sozcuk::Fonksiyon), _) => {
                 self.sira += 1;
                 self.fonksiyon_tanimi()?;
@@ -169,6 +194,9 @@ impl<'a> Derleyici<'a, '_> {
         let Some(Sozcuk::Ad(ad)) = self.sonraki() else {
             return Err("fonksiyon adı bekleniyordu".into());
         };
+        if YERLESIK.contains(&ad) {
+            return Err(format!("{} hazır bir fonksiyon, başka bir ad seç", ad));
+        }
         self.sira += 1;
         self.bekle(Sozcuk::AcParantez, "'(' bekleniyordu")?;
         let mut parametreler = Vec::new();
@@ -272,25 +300,80 @@ impl<'a> Derleyici<'a, '_> {
     }
 
     fn carpan(&mut self) -> Result<(), String> {
+        self.birincil()?;
+        // l[0][1] gibi art arda sıralar.
+        while self.sonraki() == Some(Sozcuk::KoseliAc) {
+            self.sira += 1;
+            self.ifade()?;
+            self.bekle(Sozcuk::KoseliKapa, "']' eksik")?;
+            self.kod.push(Komut::Indeks);
+        }
+        Ok(())
+    }
+
+    // Virgülle ayrılmış ifadeleri `kapanis` sözcüğüne kadar okur; kaç tane olduğunu döndürür.
+    fn ifade_listesi(&mut self, kapanis: Sozcuk, mesaj: &str) -> Result<usize, String> {
+        let mut adet = 0;
+        if self.sonraki() != Some(kapanis) {
+            loop {
+                self.ifade()?;
+                adet += 1;
+                if self.sonraki() != Some(Sozcuk::Virgul) {
+                    break;
+                }
+                self.sira += 1;
+            }
+        }
+        self.bekle(kapanis, mesaj)?;
+        Ok(adet)
+    }
+
+    // Önce yerel değişkenlere, sonra genel değişkenlere bakılır.
+    fn degisken_yeri(&self, ad: &str) -> Result<Yer, String> {
+        if let Some(yer) = self.yereller.as_ref().and_then(|y| y.iter().position(|a| *a == ad)) {
+            return Ok(Yer::Yerel(yer));
+        }
+        self.adlar
+            .iter()
+            .position(|a| a == ad)
+            .map(Yer::Genel)
+            .ok_or_else(|| format!("tanımsız değişken: {}", ad))
+    }
+
+    fn birincil(&mut self) -> Result<(), String> {
         let sozcuk = self.sonraki().ok_or("ifade yarım kaldı")?;
         self.sira += 1;
         match sozcuk {
             Sozcuk::Sayi(n) => self.kod.push(Komut::Sayi(n)),
             Sozcuk::Metin(m) => self.kod.push(Komut::Metin(Rc::from(m))),
+            Sozcuk::KoseliAc => {
+                let adet = self.ifade_listesi(Sozcuk::KoseliKapa, "']' eksik")?;
+                self.kod.push(Komut::Liste(adet));
+            }
+            // ekle listeyi yerinde büyütür, o yüzden ilk argümanı bir değişken adı olmalı.
+            Sozcuk::Ad("ekle") if self.sonraki() == Some(Sozcuk::AcParantez) => {
+                const KULLANIM: &str = "ekle(liste_adı, değer) şeklinde kullanılır";
+                self.sira += 1;
+                let Some(Sozcuk::Ad(liste)) = self.sonraki() else {
+                    return Err(KULLANIM.into());
+                };
+                self.sira += 1;
+                self.bekle(Sozcuk::Virgul, KULLANIM)?;
+                self.ifade()?;
+                self.bekle(Sozcuk::KapaParantez, KULLANIM)?;
+                let yer = self.degisken_yeri(liste)?;
+                self.kod.push(Komut::Ekle(yer));
+            }
             Sozcuk::Ad(ad) if self.sonraki() == Some(Sozcuk::AcParantez) => {
                 self.sira += 1;
-                let mut arguman = 0;
-                if self.sonraki() != Some(Sozcuk::KapaParantez) {
-                    loop {
-                        self.ifade()?;
-                        arguman += 1;
-                        if self.sonraki() != Some(Sozcuk::Virgul) {
-                            break;
-                        }
-                        self.sira += 1;
+                let arguman = self.ifade_listesi(Sozcuk::KapaParantez, "')' eksik")?;
+                if ad == "uzunluk" {
+                    if arguman != 1 {
+                        return Err("uzunluk tek bir değer alır".into());
                     }
+                    self.kod.push(Komut::Uzunluk);
+                    return Ok(());
                 }
-                self.bekle(Sozcuk::KapaParantez, "')' eksik")?;
                 let yer = self
                     .fonksiyonlar
                     .iter()
@@ -300,16 +383,9 @@ impl<'a> Derleyici<'a, '_> {
             }
             Sozcuk::Ad(ad) => {
                 // İsim burada numaraya çevrilir; çalışırken isim aranmaz.
-                // Önce yerel değişkenlere, sonra genel değişkenlere bakılır.
-                let yerel = self.yereller.as_ref().and_then(|y| y.iter().position(|a| *a == ad));
-                let komut = match yerel {
-                    Some(yer) => Komut::YerelOku(yer),
-                    None => Komut::Oku(
-                        self.adlar
-                            .iter()
-                            .position(|a| a == ad)
-                            .ok_or_else(|| format!("tanımsız değişken: {}", ad))?,
-                    ),
+                let komut = match self.degisken_yeri(ad)? {
+                    Yer::Yerel(yer) => Komut::YerelOku(yer),
+                    Yer::Genel(yer) => Komut::Oku(yer),
                 };
                 self.kod.push(komut);
             }

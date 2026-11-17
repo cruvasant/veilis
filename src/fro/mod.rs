@@ -25,11 +25,13 @@ pub struct Ortam {
     // None: adı derlenmiş ama henüz değer atanmamış.
     degerler: Vec<Option<Deger>>,
     fonksiyonlar: Vec<Fonksiyon>,
+    // Heap'te kalan boş yeri söyler; Fro belleği bitirip çekirdeği çökertmesin diye.
+    bos_bellek: fn() -> usize,
 }
 
 impl Ortam {
-    pub const fn new() -> Self {
-        Ortam { adlar: Vec::new(), degerler: Vec::new(), fonksiyonlar: Vec::new() }
+    pub const fn new(bos_bellek: fn() -> usize) -> Self {
+        Ortam { adlar: Vec::new(), degerler: Vec::new(), fonksiyonlar: Vec::new(), bos_bellek }
     }
 
     /// Kodu çalıştırır; ekrana yazılacak her değer için `yaz` çağrılır.
@@ -41,7 +43,14 @@ impl Ortam {
             // Derlenemeyen satır yarım fonksiyon bırakmasın.
             .inspect_err(|_| self.fonksiyonlar.truncate(onceki))?;
         self.degerler.resize(self.adlar.len(), None);
-        makine::calistir(&komutlar, &self.fonksiyonlar, &mut self.degerler, &self.adlar, yaz)
+        makine::calistir(
+            &komutlar,
+            &self.fonksiyonlar,
+            &mut self.degerler,
+            &self.adlar,
+            self.bos_bellek,
+            yaz,
+        )
     }
 }
 
@@ -56,7 +65,7 @@ pub fn oz_denetim() {
         Ok(cikti.join(" "))
     }
     let tamam = |s: &str| -> Result<String, String> { Ok(String::from(s)) };
-    let f = &mut Ortam::new();
+    let f = &mut Ortam::new(|| usize::MAX);
 
     // Hesap
     assert_eq!(dene(f, "2 + 3 * 4"), tamam("14"));
@@ -93,8 +102,30 @@ pub fn oz_denetim() {
     assert_eq!(dene(f, "fonksiyon gizli() { g = 5; döndür g }; gizli()"), tamam("5"));
     assert!(dene(f, "g").is_err());
     assert_eq!(dene(f, "v = 1; fonksiyon artir(v) { döndür v + 1 }; artir(10); v"), tamam("11 1"));
+    // Listeler
+    assert_eq!(dene(f, "l = [1, 2, 3]; l; l[0] + l[2]"), tamam("[1, 2, 3] 4"));
+    assert_eq!(dene(f, "l[1] = 20; ekle(l, 4); l; uzunluk(l)"), tamam("[1, 20, 3, 4] 4"));
+    // Liste bir değer: kopyayı değiştirmek aslını etkilemez.
+    assert_eq!(dene(f, "m = l; m[0] = 99; l[0]; m[0]"), tamam("1 99"));
+    assert_eq!(dene(f, "[]; [1] + [2]; [1, [2, \"a\"]]"), tamam("[] [1, 2] [1, [2, \"a\"]]"));
+    assert_eq!(dene(f, "uzunluk(\"çay\"); \"çay\"[0]; -l[1]"), tamam("3 ç -20"));
+    assert_eq!(dene(f, "fonksiyon ilk(x) { döndür x[0] }; ilk([7, 8])"), tamam("7"));
+    assert_eq!(
+        dene(f, "s = []; i = 0; döngü i < 5 { ekle(s, i * i); i = i + 1 }; s"),
+        tamam("[0, 1, 4, 9, 16]")
+    );
     // Hatalar
     for hatali in [
+        "l[10]",
+        "l[-1]",
+        "5[0]",
+        "l[\"a\"]",
+        "ekle(5, 1)",
+        "ekle(l)",
+        "uzunluk(5)",
+        "uzunluk(l, l)",
+        "fonksiyon uzunluk(x) { }",
+        "[1, 2",
         "kare(1, 2)",
         "olmayan()",
         "döndür 1",
@@ -122,4 +153,9 @@ pub fn oz_denetim() {
     assert!(dene(f, "x = 1 / 0").is_err());
     assert!(dene(f, "x").is_err());
     assert_eq!(dene(f, ""), tamam(""));
+
+    // Bellek dolunca liste büyümez ama hesap çalışmaya devam eder.
+    let dolu = &mut Ortam::new(|| 0);
+    assert!(dene(dolu, "[1]").is_err());
+    assert_eq!(dene(dolu, "1 + 1"), tamam("2"));
 }

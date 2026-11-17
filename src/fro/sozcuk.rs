@@ -33,6 +33,8 @@ pub enum Sozcuk<'a> {
     KapaParantez,
     AcSuslu,
     KapaSuslu,
+    KoseliAc,
+    KoseliKapa,
     // ';' ya da yeni satır: bir deyimi bitirir.
     Ayrac,
 }
@@ -104,6 +106,8 @@ pub fn bol(metin: &str) -> Result<Vec<Sozcuk<'_>>, String> {
                 ('{', false) => Sozcuk::AcSuslu,
                 ('}', false) => Sozcuk::KapaSuslu,
                 (',', false) => Sozcuk::Virgul,
+                ('[', false) => Sozcuk::KoseliAc,
+                (']', false) => Sozcuk::KoseliKapa,
                 (';' | '\n', false) => Sozcuk::Ayrac,
                 _ => return Err(format!("anlaşılmayan işaret: {}", c)),
             });

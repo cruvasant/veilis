@@ -8,7 +8,7 @@ use x86_64::structures::paging::mapper::MapToError;
 use x86_64::structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB};
 
 pub const HEAP_BASLANGIC: u64 = 0x4444_4444_0000;
-pub const HEAP_BOYUTU: u64 = 100 * 1024;
+pub const HEAP_BOYUTU: u64 = 1024 * 1024;
 
 #[global_allocator]
 static HEAP: LockedHeap = LockedHeap::empty();
@@ -34,4 +34,8 @@ pub fn init(
 pub fn kullanim() -> (usize, usize) {
     let heap = HEAP.lock();
     (heap.used(), heap.size())
+}
+
+pub fn bos() -> usize {
+    HEAP.lock().free()
 }

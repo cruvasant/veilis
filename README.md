@@ -16,11 +16,11 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 - GDT ve TSS ile double fault için ayrı stack, böylece stack taşması da yakalanıyor
 - PIC üzerinden donanım kesmeleri: zamanlayıcı ve klavye
 - Türkçe Q klavye düzeni (Shift, Caps Lock, AltGr) ve VGA yazı tipine eklenen ı, İ, ş, Ş, ğ, Ğ
-- Sayfalama (paging), fiziksel çerçeve dağıtıcı ve 100 KiB heap (`String`, `Vec`, `Box`)
+- Sayfalama (paging), fiziksel çerçeve dağıtıcı ve 1 MiB heap (`String`, `Vec`, `Box`)
 - Page fault yakalama
 - Basit komut satırı: `yardım`, `temizle`, `sürüm`, `süre`, `bellek`, `yaz`, `fro`
 - Fro dili: Türkçe anahtar kelimeli, bytecode'a derlenip sanal makinede çalışan bir dil
-  (metin, karşılaştırma, `eğer`, `döngü`, fonksiyonlar)
+  (metin, liste, karşılaştırma, `eğer`, `döngü`, fonksiyonlar)
 
 ## Fro
 
@@ -44,11 +44,20 @@ fro> fonksiyon fakt(n) {
 ...> }
 fro> yaz fakt(20)
 2432902008176640000
+fro> kareler = []
+fro> i = 1; döngü i <= 5 { ekle(kareler, i * i); i = i + 1 }
+fro> kareler
+[1, 4, 9, 16, 25]
+fro> kareler[2] + uzunluk(kareler)
+14
 ```
 
 Desteklenenler:
 
 - Tam sayılar ve metinler (`"merhaba"`); metne `+` ile sayı ya da metin eklenebilir
+- Listeler: `[1, 2, 3]`, `l[0]`, `l[0] = 5`, `ekle(l, 4)`, `uzunluk(l)`, `[1] + [2]`;
+  listeler değer gibi davranır (`b = a` sonrası `b`'yi değiştirmek `a`'yı etkilemez)
+- Bellek dolarsa Fro hata verir, çekirdek çalışmaya devam eder
 - `+ - * / %`, parantezler, eksi işareti
 - Karşılaştırma: `== != < > <= >=` (doğruysa 1, yanlışsa 0)
 - Değişken atama, `yaz`, `eğer` / `değilse` / `değilse eğer`, `döngü`

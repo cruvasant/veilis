@@ -82,7 +82,7 @@ pub fn calistir(toplam_ram: u64) -> ! {
                     (None, "fro") => {
                         println!("Fro {}. Çıkmak için 'çık' yaz.", env!("CARGO_PKG_VERSION"));
                         println!("Çalışan döngüyü durdurmak için Ctrl+C.");
-                        fro = Some(fro::Ortam::new());
+                        fro = Some(fro::Ortam::new(crate::allocator::bos));
                     }
                     (None, _) => komut(&satir, toplam_ram),
                 }
