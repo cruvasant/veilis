@@ -3,8 +3,8 @@
 Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 Çekirdeği (kernel) Rust ile sıfırdan yazılıyor.
 
-> **Durum:** Aşama 7. Çekirdek açılıyor, işlemci istisnalarını yakalıyor, belleği sayfalarla
-> yönetiyor ve Türkçe klavyeyle kullanılan basit bir komut satırı sunuyor.
+> **Durum:** Aşama 8. Çekirdek açılıyor, işlemci istisnalarını yakalıyor, belleği sayfalarla
+> yönetiyor, Türkçe klavyeyle kullanılan bir komut satırı ve Fro dilinin ilk sürümünü sunuyor.
 > Henüz günlük kullanıma uygun değildir; bir öğrenme ve geliştirme projesidir.
 
 ## Neler var?
@@ -18,7 +18,26 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 - Türkçe Q klavye düzeni (Shift, Caps Lock, AltGr) ve VGA yazı tipine eklenen ı, İ, ş, Ş, ğ, Ğ
 - Sayfalama (paging), fiziksel çerçeve dağıtıcı ve 100 KiB heap (`String`, `Vec`, `Box`)
 - Page fault yakalama
-- Basit komut satırı: `yardım`, `temizle`, `sürüm`, `süre`, `bellek`, `yaz`
+- Basit komut satırı: `yardım`, `temizle`, `sürüm`, `süre`, `bellek`, `yaz`, `fro`
+- Fro dili: Türkçe anahtar kelimeli, bytecode'a derlenip sanal makinede çalışan bir dil
+
+## Fro
+
+Fro, Veilis'in kendi programlama dili. Komut satırında `fro` yazarak başlatılır, `çık` ile kapanır.
+Şimdilik tam sayılarla hesap ve değişkenleri destekliyor:
+
+```
+fro> a = 5
+fro> yaz a * (2 + 3)
+25
+fro> sonuç = a % 3
+fro> sonuç
+2
+```
+
+Desteklenenler: `+ - * / %`, parantezler, eksi işareti, değişken atama ve `yaz`.
+Her satır önce sözcüklere ayrılır, sonra bytecode'a derlenir ve sanal makinede çalıştırılır;
+değişken adları derleme sırasında numaraya çevrildiği için çalışırken isim aranmaz.
 - `bootloader` 0.9 ile BIOS üzerinden önyükleme
 - QEMU sanal makinesinde çalıştırma
 
@@ -71,6 +90,7 @@ cargo bootimage
 | `src/kabuk.rs` | Komut satırı ve komutlar |
 | `src/memory.rs` | Sayfa tabloları ve fiziksel çerçeve dağıtıcı |
 | `src/allocator.rs` | Heap |
+| `src/fro/` | Fro dili: sözcük ayırıcı, derleyici ve sanal makine |
 | `src/gdt.rs` | GDT ve TSS: istisnalar için yedek stack |
 | `x86_64-veilis.json` | Derleme hedefi: işletim sistemi olmayan x86_64 |
 | `.cargo/config.toml` | `core` kütüphanesini kaynaktan derleme ve `cargo run` ayarları |

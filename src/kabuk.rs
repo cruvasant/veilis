@@ -6,7 +6,7 @@ use alloc::string::String;
 use spin::Mutex;
 use x86_64::instructions::interrupts;
 
-use crate::{print, println, vga};
+use crate::{fro, print, println, vga};
 
 const KUYRUK_BOYUTU: usize = 32;
 // "> " ile birlikte bir ekran satırına sığsın.
@@ -56,15 +56,28 @@ fn sonraki_tus() -> char {
 pub fn calistir(toplam_ram: u64) -> ! {
     // Satır artık heap'te: String gerektiği kadar büyür.
     let mut satir = String::new();
+    // Some ise Fro modundayız; değişkenler oturum boyunca kalır.
+    let mut fro: Option<fro::Ortam> = None;
 
     print!("> ");
     loop {
         match sonraki_tus() {
             '\n' => {
                 println!();
-                komut(&satir, toplam_ram);
+                match (&mut fro, satir.trim()) {
+                    (Some(_), "çık" | "cik") => fro = None,
+                    (Some(ortam), kod) => match ortam.calistir(kod) {
+                        Ok(degerler) => degerler.iter().for_each(|d| println!("{}", d)),
+                        Err(hata) => println!("Hata: {}", hata),
+                    },
+                    (None, "fro") => {
+                        println!("Fro {}. Çıkmak için 'çık' yaz.", env!("CARGO_PKG_VERSION"));
+                        fro = Some(fro::Ortam::new());
+                    }
+                    (None, _) => komut(&satir, toplam_ram),
+                }
                 satir.clear();
-                print!("> ");
+                print!("{}", if fro.is_some() { "fro> " } else { "> " });
             }
             '\u{8}' => {
                 if satir.pop().is_some() {
@@ -91,6 +104,7 @@ fn komut(satir: &str, toplam_ram: u64) {
             println!("  sürüm       Veilis sürümünü yazar");
             println!("  süre        ne kadar süredir açık olduğunu yazar");
             println!("  bellek      RAM ve heap kullanımını gösterir");
+            println!("  fro         Fro dilini başlatır");
             println!("  yaz <metin> yazdığın metni geri yazar");
         }
         "temizle" => vga::temizle(),

@@ -11,6 +11,7 @@
 extern crate alloc;
 
 mod allocator;
+mod fro;
 mod gdt;
 mod interrupts;
 mod kabuk;
@@ -39,6 +40,9 @@ fn cekirdek_main(boot_info: &'static BootInfo) -> ! {
     let mut sayfalar = unsafe { memory::init(fiziksel_ofset) };
     let mut cerceveler = unsafe { memory::CerceveDagitici::new(&boot_info.memory_map) };
     allocator::init(&mut sayfalar, &mut cerceveler).expect("heap kurulamadı");
+
+    #[cfg(debug_assertions)]
+    fro::oz_denetim();
 
     println!("Komutlar için 'yardım' yaz.\n");
 
