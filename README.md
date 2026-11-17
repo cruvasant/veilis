@@ -3,8 +3,8 @@
 Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 Çekirdeği (kernel) Rust ile sıfırdan yazılıyor.
 
-> **Durum:** Aşama 5. Çekirdek açılıyor, ekrana yazabiliyor, işlemci istisnalarını yakalıyor
-> ve klavyeden yazı alıyor.
+> **Durum:** Aşama 6. Çekirdek açılıyor, işlemci istisnalarını yakalıyor ve Türkçe klavyeyle
+> kullanılan basit bir komut satırı sunuyor.
 > Henüz günlük kullanıma uygun değildir; bir öğrenme ve geliştirme projesidir.
 
 ## Neler var?
@@ -16,6 +16,7 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 - GDT ve TSS ile double fault için ayrı stack, böylece stack taşması da yakalanıyor
 - PIC üzerinden donanım kesmeleri: zamanlayıcı ve klavye
 - Türkçe Q klavye düzeni (Shift, Caps Lock, AltGr) ve VGA yazı tipine eklenen ı, İ, ş, Ş, ğ, Ğ
+- Basit komut satırı: `yardım`, `temizle`, `sürüm`, `süre`, `yaz`
 - `bootloader` 0.9 ile BIOS üzerinden önyükleme
 - QEMU sanal makinesinde çalıştırma
 
@@ -46,7 +47,8 @@ cargo run
 ```
 
 `cargo run` önce çekirdeği derler, sonra disk imajını üretir ve QEMU'da açar.
-Açılan pencerede `Merhaba, ben Veilis` yazısı görünür. Pencereye tıklayıp klavyeden yazabilirsiniz.
+Açılan pencerede `Merhaba, ben Veilis` yazısı ve komut satırı görünür. Pencereye tıklayıp
+`yardım` yazarak komutları görebilirsiniz.
 
 Yalnızca disk imajını üretmek için:
 
@@ -64,6 +66,7 @@ cargo bootimage
 | `src/vga.rs` | VGA ekran yazıcısı ve `print!` / `println!` makroları |
 | `src/interrupts.rs` | Kesme tablosu (IDT), istisnalar, zamanlayıcı ve klavye |
 | `src/klavye.rs` | Türkçe Q klavye düzeni |
+| `src/kabuk.rs` | Komut satırı ve komutlar |
 | `src/gdt.rs` | GDT ve TSS: istisnalar için yedek stack |
 | `x86_64-veilis.json` | Derleme hedefi: işletim sistemi olmayan x86_64 |
 | `.cargo/config.toml` | `core` kütüphanesini kaynaktan derleme ve `cargo run` ayarları |

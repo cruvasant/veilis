@@ -8,8 +8,10 @@ use spin::{Mutex, Once};
 use x86_64::instructions::port::Port;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
 
+use core::sync::atomic::{AtomicU64, Ordering};
+
 use crate::klavye::TurkceQ;
-use crate::{print, println};
+use crate::println;
 
 // Donanım kesmeleri (zamanlayıcı, klavye...) PIC denen yonga üzerinden gelir.
 // İlk 32 numara işlemci istisnalarına ayrıldığı için PIC'i 32'den başlatıyoruz.
@@ -46,8 +48,15 @@ pub fn init() {
     x86_64::instructions::interrupts::enable();
 }
 
-// Saniyede ~18 kez gelir. Şimdilik yalnızca "aldım" diyoruz.
+static TIK: AtomicU64 = AtomicU64::new(0);
+
+// Zamanlayıcı yongası (PIT) saniyede 1193182 / 65536 ≈ 18.2 kez çalar.
+pub fn acik_kalma_saniye() -> u64 {
+    TIK.load(Ordering::Relaxed) * 65536 / 1_193_182
+}
+
 extern "x86-interrupt" fn zamanlayici(_frame: InterruptStackFrame) {
+    TIK.fetch_add(1, Ordering::Relaxed);
     unsafe { PICS.lock().notify_end_of_interrupt(ZAMANLAYICI) };
 }
 
@@ -57,7 +66,7 @@ extern "x86-interrupt" fn klavye(_frame: InterruptStackFrame) {
     let mut klavye = KLAVYE_DURUMU.lock();
     if let Ok(Some(olay)) = klavye.add_byte(kod) {
         if let Some(DecodedKey::Unicode(c)) = klavye.process_keyevent(olay) {
-            print!("{}", c);
+            crate::kabuk::tus_ekle(c);
         }
     }
     // PIC'e "bitti" demezsek bir sonraki kesmeyi göndermez.

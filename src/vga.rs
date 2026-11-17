@@ -79,6 +79,21 @@ impl Yazici {
             unsafe { self.hucre(YUKSEKLIK - 1, sutun).write_volatile(bos) };
         }
     }
+
+    fn temizle(&mut self) {
+        let bos = (self.renk as u16) << 8 | b' ' as u16;
+        for satir in 0..YUKSEKLIK {
+            for sutun in 0..GENISLIK {
+                unsafe { self.hucre(satir, sutun).write_volatile(bos) };
+            }
+        }
+        self.satir = 0;
+        self.sutun = 0;
+    }
+}
+
+pub fn temizle() {
+    x86_64::instructions::interrupts::without_interrupts(|| YAZICI.lock().temizle());
 }
 
 impl fmt::Write for Yazici {

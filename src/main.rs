@@ -9,6 +9,7 @@
 
 mod gdt;
 mod interrupts;
+mod kabuk;
 mod klavye;
 mod vga;
 
@@ -26,9 +27,9 @@ pub extern "C" fn _start() -> ! {
     gdt::init();
     interrupts::init();
 
-    print!("\nKlavyeden yazabilirsin:\n> ");
+    println!("Komutlar için 'yardım' yaz.\n");
 
-    bekle()
+    kabuk::calistir()
 }
 
 // Boş döngüde işlemciyi yormak yerine hlt ile bir sonraki kesmeye kadar uyutuyoruz.
