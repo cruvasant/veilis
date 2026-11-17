@@ -14,6 +14,9 @@ pub enum Sozcuk<'a> {
     Eger,
     Degilse,
     Dongu,
+    Fonksiyon,
+    Dondur,
+    Virgul,
     Esittir,
     EsitEsit,
     EsitDegil,
@@ -66,6 +69,8 @@ pub fn bol(metin: &str) -> Result<Vec<Sozcuk<'_>>, String> {
                 "eğer" | "eger" => Sozcuk::Eger,
                 "değilse" | "degilse" => Sozcuk::Degilse,
                 "döngü" | "dongu" => Sozcuk::Dongu,
+                "fonksiyon" => Sozcuk::Fonksiyon,
+                "döndür" | "dondur" => Sozcuk::Dondur,
                 ad => Sozcuk::Ad(ad),
             });
         } else if c == '"' {
@@ -98,6 +103,7 @@ pub fn bol(metin: &str) -> Result<Vec<Sozcuk<'_>>, String> {
                 (')', false) => Sozcuk::KapaParantez,
                 ('{', false) => Sozcuk::AcSuslu,
                 ('}', false) => Sozcuk::KapaSuslu,
+                (',', false) => Sozcuk::Virgul,
                 (';' | '\n', false) => Sozcuk::Ayrac,
                 _ => return Err(format!("anlaşılmayan işaret: {}", c)),
             });

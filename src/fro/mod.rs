@@ -14,6 +14,7 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 pub use makine::Deger;
+use makine::Fonksiyon;
 
 /// Klavye kesmesi Ctrl+C'de bunu açar; çalışan döngü durur.
 pub static DURDUR: AtomicBool = AtomicBool::new(false);
@@ -23,20 +24,24 @@ pub struct Ortam {
     adlar: Vec<String>,
     // None: adı derlenmiş ama henüz değer atanmamış.
     degerler: Vec<Option<Deger>>,
+    fonksiyonlar: Vec<Fonksiyon>,
 }
 
 impl Ortam {
     pub const fn new() -> Self {
-        Ortam { adlar: Vec::new(), degerler: Vec::new() }
+        Ortam { adlar: Vec::new(), degerler: Vec::new(), fonksiyonlar: Vec::new() }
     }
 
     /// Kodu çalıştırır; ekrana yazılacak her değer için `yaz` çağrılır.
     pub fn calistir(&mut self, kod: &str, yaz: &mut dyn FnMut(&Deger)) -> Result<(), String> {
         DURDUR.store(false, Ordering::Relaxed);
         let sozcukler = sozcuk::bol(kod)?;
-        let komutlar = derleyici::derle(&sozcukler, &mut self.adlar)?;
+        let onceki = self.fonksiyonlar.len();
+        let komutlar = derleyici::derle(&sozcukler, &mut self.adlar, &mut self.fonksiyonlar)
+            // Derlenemeyen satır yarım fonksiyon bırakmasın.
+            .inspect_err(|_| self.fonksiyonlar.truncate(onceki))?;
         self.degerler.resize(self.adlar.len(), None);
-        makine::calistir(&komutlar, &mut self.degerler, &self.adlar, yaz)
+        makine::calistir(&komutlar, &self.fonksiyonlar, &mut self.degerler, &self.adlar, yaz)
     }
 }
 
@@ -73,8 +78,30 @@ pub fn oz_denetim() {
     // döngü, birden çok satır
     assert_eq!(dene(f, "i = 0; t = 0; döngü i < 5 { i = i + 1; t = t + i }; t"), tamam("15"));
     assert_eq!(dene(f, "i = 3\ndöngü i > 0 {\n  yaz i\n  i = i - 1\n}"), tamam("3 2 1"));
+    // Fonksiyonlar
+    assert_eq!(dene(f, "fonksiyon kare(x) { döndür x * x }"), tamam(""));
+    assert_eq!(dene(f, "kare(7); yaz kare(2) + 1"), tamam("49 5"));
+    assert_eq!(
+        dene(f, "fonksiyon fakt(n) {\n eğer n <= 1 { döndür 1 }\n döndür n * fakt(n - 1)\n}"),
+        tamam("")
+    );
+    assert_eq!(dene(f, "fakt(10)"), tamam("3628800"));
+    assert_eq!(dene(f, "fonksiyon selam(kim) { yaz \"merhaba \" + kim }"), tamam(""));
+    assert_eq!(dene(f, "selam(\"Veilis\")"), tamam("merhaba Veilis"));
+    assert_eq!(dene(f, "fonksiyon topla(a, b) { döndür a + b }; topla(2, 3)"), tamam("5"));
+    // Yerel değişkenler dışarı sızmaz, parametre genel değişkeni gölgeler.
+    assert_eq!(dene(f, "fonksiyon gizli() { g = 5; döndür g }; gizli()"), tamam("5"));
+    assert!(dene(f, "g").is_err());
+    assert_eq!(dene(f, "v = 1; fonksiyon artir(v) { döndür v + 1 }; artir(10); v"), tamam("11 1"));
     // Hatalar
     for hatali in [
+        "kare(1, 2)",
+        "olmayan()",
+        "döndür 1",
+        "fonksiyon (x) { }",
+        "fonksiyon h( { }",
+        "fonksiyon d() { fonksiyon i() { } }",
+        "fonksiyon sonsuz() { döndür sonsuz() }; sonsuz()",
         "1 / 0",
         "9223372036854775807 + 1",
         "y = y + 1",

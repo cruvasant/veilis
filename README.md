@@ -20,7 +20,7 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 - Page fault yakalama
 - Basit komut satırı: `yardım`, `temizle`, `sürüm`, `süre`, `bellek`, `yaz`, `fro`
 - Fro dili: Türkçe anahtar kelimeli, bytecode'a derlenip sanal makinede çalışan bir dil
-  (metin, karşılaştırma, `eğer`, `döngü`)
+  (metin, karşılaştırma, `eğer`, `döngü`, fonksiyonlar)
 
 ## Fro
 
@@ -38,6 +38,12 @@ fro> döngü n > 0 {
 kalan: 3
 kalan: 2
 kalan: 1
+fro> fonksiyon fakt(n) {
+...>   eğer n <= 1 { döndür 1 }
+...>   döndür n * fakt(n - 1)
+...> }
+fro> yaz fakt(20)
+2432902008176640000
 ```
 
 Desteklenenler:
@@ -46,6 +52,8 @@ Desteklenenler:
 - `+ - * / %`, parantezler, eksi işareti
 - Karşılaştırma: `== != < > <= >=` (doğruysa 1, yanlışsa 0)
 - Değişken atama, `yaz`, `eğer` / `değilse` / `değilse eğer`, `döngü`
+- `fonksiyon` ve `döndür`; parametreler ve fonksiyon içindeki değişkenler yereldir,
+  fonksiyonlar kendini çağırabilir (en fazla 200 iç içe çağrı)
 - Deyimler `;` ya da yeni satırla ayrılır; `{` açık kaldıkça satırlar birikir
 - Çalışan bir döngü Ctrl+C ile durdurulur
 Her satır önce sözcüklere ayrılır, sonra bytecode'a derlenir ve sanal makinede çalıştırılır;

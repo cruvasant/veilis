@@ -1,24 +1,27 @@
 // 2. adım: sözcükleri sanal makinenin komutlarına (bytecode) çevirir.
 // Kurallar (dilbilgisi):
 //   program = deyim ((";" | yeni satır) deyim)*
-//   deyim   = ad "=" ifade | "yaz" ifade | eğer | "döngü" ifade blok | ifade
+//   deyim   = ad "=" ifade | "yaz" ifade | eğer | "döngü" ifade blok
+//           | "fonksiyon" ad "(" [ad ("," ad)*] ")" blok | "döndür" ifade | ifade
 //   eğer    = "eğer" ifade blok ["değilse" (eğer | blok)]
 //   blok    = "{" program "}"
 //   ifade   = toplam [("==" | "!=" | "<" | ">" | "<=" | ">=") toplam]
 //   toplam  = terim  (("+" | "-") terim)*
 //   terim   = çarpan (("*" | "/" | "%") çarpan)*
-//   çarpan  = sayı | metin | ad | "-" çarpan | "(" ifade ")"
+//   çarpan  = sayı | metin | ad | ad "(" [ifade ("," ifade)*] ")" | "-" çarpan | "(" ifade ")"
 // Çarpma toplamadan önce yapılsın diye her kural bir alttakini çağırır.
 // Makine yığın (stack) ile çalışır: "2 + 3" -> Sayi(2), Sayi(3), Topla.
 // eğer ve döngü, atlama komutlarına dönüşür:
 //   döngü k { g }  ->  baş: k, YanlissaAtla(son), g, Atla(baş), son:
+// Her fonksiyonun kodu ayrı derlenir. İçindeki değişkenler yereldir (Yerel* komutları);
+// yalnızca o çağrı süresince yaşar.
 
 use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use super::makine::Komut;
+use super::makine::{Fonksiyon, Komut};
 use super::sozcuk::Sozcuk;
 
 struct Derleyici<'a, 'b> {
@@ -26,10 +29,24 @@ struct Derleyici<'a, 'b> {
     sira: usize,
     kod: Vec<Komut>,
     adlar: &'b mut Vec<String>,
+    fonksiyonlar: &'b mut Vec<Fonksiyon>,
+    // Some: bir fonksiyonun içindeyiz; parametreler ve yerel değişkenlerin adları.
+    yereller: Option<Vec<&'a str>>,
 }
 
-pub fn derle(sozcukler: &[Sozcuk], adlar: &mut Vec<String>) -> Result<Vec<Komut>, String> {
-    let mut d = Derleyici { sozcukler, sira: 0, kod: Vec::new(), adlar };
+pub fn derle(
+    sozcukler: &[Sozcuk],
+    adlar: &mut Vec<String>,
+    fonksiyonlar: &mut Vec<Fonksiyon>,
+) -> Result<Vec<Komut>, String> {
+    let mut d = Derleyici {
+        sozcukler,
+        sira: 0,
+        kod: Vec::new(),
+        adlar,
+        fonksiyonlar,
+        yereller: None,
+    };
     d.program()?;
     if d.sonraki().is_some() {
         return Err("fazladan '}' var".into());
@@ -72,14 +89,30 @@ impl<'a> Derleyici<'a, '_> {
                 self.sira += 2;
                 self.ifade()?;
                 // Değişkene ifadeden sonra yer açıyoruz: "a = a + 1" a tanımsızken hata versin.
-                let yer = match self.adlar.iter().position(|a| a == ad) {
-                    Some(yer) => yer,
-                    None => {
-                        self.adlar.push(String::from(ad));
-                        self.adlar.len() - 1
-                    }
+                // Fonksiyon içindeki atama her zaman yerel değişkene yapılır.
+                let komut = match &mut self.yereller {
+                    Some(yereller) => Komut::YerelAta(yer_ac(yereller, ad)),
+                    None => match self.adlar.iter().position(|a| a == ad) {
+                        Some(yer) => Komut::Ata(yer),
+                        None => {
+                            self.adlar.push(String::from(ad));
+                            Komut::Ata(self.adlar.len() - 1)
+                        }
+                    },
                 };
-                self.kod.push(Komut::Ata(yer));
+                self.kod.push(komut);
+            }
+            (Some(Sozcuk::Fonksiyon), _) => {
+                self.sira += 1;
+                self.fonksiyon_tanimi()?;
+            }
+            (Some(Sozcuk::Dondur), _) => {
+                if self.yereller.is_none() {
+                    return Err("döndür yalnızca fonksiyon içinde kullanılabilir".into());
+                }
+                self.sira += 1;
+                self.ifade()?;
+                self.kod.push(Komut::Dondur);
             }
             (Some(Sozcuk::Yaz), _) => {
                 self.sira += 1;
@@ -126,6 +159,48 @@ impl<'a> Derleyici<'a, '_> {
             self.blok()?;
         }
         self.atlama_duzelt(son);
+        Ok(())
+    }
+
+    fn fonksiyon_tanimi(&mut self) -> Result<(), String> {
+        if self.yereller.is_some() {
+            return Err("fonksiyon içinde fonksiyon tanımlanamaz".into());
+        }
+        let Some(Sozcuk::Ad(ad)) = self.sonraki() else {
+            return Err("fonksiyon adı bekleniyordu".into());
+        };
+        self.sira += 1;
+        self.bekle(Sozcuk::AcParantez, "'(' bekleniyordu")?;
+        let mut parametreler = Vec::new();
+        while let Some(Sozcuk::Ad(p)) = self.sonraki() {
+            parametreler.push(p);
+            self.sira += 1;
+            if self.sonraki() != Some(Sozcuk::Virgul) {
+                break;
+            }
+            self.sira += 1;
+        }
+        self.bekle(Sozcuk::KapaParantez, "')' bekleniyordu")?;
+
+        // Kendini çağırabilsin (özyineleme) diye adı gövdeden önce kaydediyoruz.
+        let yer = match self.fonksiyonlar.iter().position(|f| f.ad == ad) {
+            Some(yer) => yer,
+            None => {
+                self.fonksiyonlar.push(Fonksiyon::new(ad, parametreler.len(), 0, Vec::new()));
+                self.fonksiyonlar.len() - 1
+            }
+        };
+
+        // Gövdeyi ayrı bir kod listesine derle, sonra ana koda geri dön.
+        let parametre = parametreler.len();
+        self.yereller = Some(parametreler);
+        let ana_kod = core::mem::take(&mut self.kod);
+        let sonuc = self.blok();
+        let govde = core::mem::replace(&mut self.kod, ana_kod);
+        let yerel_sayisi = self.yereller.take().map_or(0, |y| y.len());
+        sonuc?;
+
+        self.fonksiyonlar[yer] = Fonksiyon::new(ad, parametre, yerel_sayisi, govde);
         Ok(())
     }
 
@@ -202,14 +277,41 @@ impl<'a> Derleyici<'a, '_> {
         match sozcuk {
             Sozcuk::Sayi(n) => self.kod.push(Komut::Sayi(n)),
             Sozcuk::Metin(m) => self.kod.push(Komut::Metin(Rc::from(m))),
+            Sozcuk::Ad(ad) if self.sonraki() == Some(Sozcuk::AcParantez) => {
+                self.sira += 1;
+                let mut arguman = 0;
+                if self.sonraki() != Some(Sozcuk::KapaParantez) {
+                    loop {
+                        self.ifade()?;
+                        arguman += 1;
+                        if self.sonraki() != Some(Sozcuk::Virgul) {
+                            break;
+                        }
+                        self.sira += 1;
+                    }
+                }
+                self.bekle(Sozcuk::KapaParantez, "')' eksik")?;
+                let yer = self
+                    .fonksiyonlar
+                    .iter()
+                    .position(|f| f.ad == ad)
+                    .ok_or_else(|| format!("tanımsız fonksiyon: {}", ad))?;
+                self.kod.push(Komut::Cagir(yer, arguman));
+            }
             Sozcuk::Ad(ad) => {
                 // İsim burada numaraya çevrilir; çalışırken isim aranmaz.
-                let yer = self
-                    .adlar
-                    .iter()
-                    .position(|a| a == ad)
-                    .ok_or_else(|| format!("tanımsız değişken: {}", ad))?;
-                self.kod.push(Komut::Oku(yer));
+                // Önce yerel değişkenlere, sonra genel değişkenlere bakılır.
+                let yerel = self.yereller.as_ref().and_then(|y| y.iter().position(|a| *a == ad));
+                let komut = match yerel {
+                    Some(yer) => Komut::YerelOku(yer),
+                    None => Komut::Oku(
+                        self.adlar
+                            .iter()
+                            .position(|a| a == ad)
+                            .ok_or_else(|| format!("tanımsız değişken: {}", ad))?,
+                    ),
+                };
+                self.kod.push(komut);
             }
             Sozcuk::Eksi => {
                 self.carpan()?;
@@ -223,4 +325,11 @@ impl<'a> Derleyici<'a, '_> {
         }
         Ok(())
     }
+}
+
+fn yer_ac<'a>(adlar: &mut Vec<&'a str>, ad: &'a str) -> usize {
+    adlar.iter().position(|a| *a == ad).unwrap_or_else(|| {
+        adlar.push(ad);
+        adlar.len() - 1
+    })
 }
