@@ -3,8 +3,8 @@
 Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 Çekirdeği (kernel) Rust ile sıfırdan yazılıyor.
 
-> **Durum:** Aşama 4. Çekirdek açılıyor, `println!` ile ekrana yazabiliyor ve işlemci istisnalarını,
-> stack taşması dahil, yakalıyor.
+> **Durum:** Aşama 5. Çekirdek açılıyor, ekrana yazabiliyor, işlemci istisnalarını yakalıyor
+> ve klavyeden yazı alıyor.
 > Henüz günlük kullanıma uygun değildir; bir öğrenme ve geliştirme projesidir.
 
 ## Neler var?
@@ -14,6 +14,7 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 - Panik olduğunda hata mesajını ekrana basma
 - IDT ile işlemci istisnalarını yakalama: breakpoint ve double fault
 - GDT ve TSS ile double fault için ayrı stack, böylece stack taşması da yakalanıyor
+- PIC üzerinden donanım kesmeleri: zamanlayıcı ve klavye (şimdilik US düzeni)
 - `bootloader` 0.9 ile BIOS üzerinden önyükleme
 - QEMU sanal makinesinde çalıştırma
 
@@ -44,7 +45,7 @@ cargo run
 ```
 
 `cargo run` önce çekirdeği derler, sonra disk imajını üretir ve QEMU'da açar.
-Açılan pencerede siyah ekranın sol üst köşesinde `Merhaba, ben Veilis` yazısı görünür.
+Açılan pencerede `Merhaba, ben Veilis` yazısı görünür. Pencereye tıklayıp klavyeden yazabilirsiniz.
 
 Yalnızca disk imajını üretmek için:
 
@@ -60,7 +61,7 @@ cargo bootimage
 |-------|----------|
 | `src/main.rs` | Çekirdeğin kaynak kodu (`_start` başlangıç noktası) |
 | `src/vga.rs` | VGA ekran yazıcısı ve `print!` / `println!` makroları |
-| `src/interrupts.rs` | Kesme tablosu (IDT) ve istisna fonksiyonları |
+| `src/interrupts.rs` | Kesme tablosu (IDT), istisnalar, zamanlayıcı ve klavye |
 | `src/gdt.rs` | GDT ve TSS: istisnalar için yedek stack |
 | `x86_64-veilis.json` | Derleme hedefi: işletim sistemi olmayan x86_64 |
 | `.cargo/config.toml` | `core` kütüphanesini kaynaktan derleme ve `cargo run` ayarları |

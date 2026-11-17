@@ -24,11 +24,16 @@ pub extern "C" fn _start() -> ! {
     gdt::init();
     interrupts::init();
 
-    // Deneme: breakpoint istisnası tetikle, sonra devam ettiğimizi göster.
-    x86_64::instructions::interrupts::int3();
-    println!("Breakpoint sonrasi devam ediyoruz");
+    print!("\nKlavyeden yazabilirsin:\n> ");
 
-    loop {}
+    bekle()
+}
+
+// Boş döngüde işlemciyi yormak yerine hlt ile bir sonraki kesmeye kadar uyutuyoruz.
+fn bekle() -> ! {
+    loop {
+        x86_64::instructions::hlt();
+    }
 }
 
 // Bir panik (kurtarılamaz hata) olursa çağrılır. std olmadığı için
@@ -36,5 +41,5 @@ pub extern "C" fn _start() -> ! {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     println!("{}", info);
-    loop {}
+    bekle()
 }

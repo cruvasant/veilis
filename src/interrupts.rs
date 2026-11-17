@@ -2,10 +2,27 @@
 // durumlarda işlemci, IDT'de (Interrupt Descriptor Table) o hata için
 // kayıtlı fonksiyonu çağırır.
 
-use spin::Once;
+use pc_keyboard::{DecodedKey, HandleControl, PS2Keyboard, ScancodeSet1, layouts};
+use pic8259::ChainedPics;
+use spin::{Mutex, Once};
+use x86_64::instructions::port::Port;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
 
-use crate::println;
+use crate::{print, println};
+
+// Donanım kesmeleri (zamanlayıcı, klavye...) PIC denen yonga üzerinden gelir.
+// İlk 32 numara işlemci istisnalarına ayrıldığı için PIC'i 32'den başlatıyoruz.
+const PIC_1: u8 = 32;
+const PIC_2: u8 = PIC_1 + 8;
+const ZAMANLAYICI: u8 = PIC_1;
+const KLAVYE: u8 = PIC_1 + 1;
+
+static PICS: Mutex<ChainedPics> = Mutex::new(unsafe { ChainedPics::new(PIC_1, PIC_2) });
+
+// shortcut: yalnızca US düzeni; pc-keyboard'da Türkçe Q yok, kendi düzenimizi yazınca değişecek.
+static KLAVYE_DURUMU: Mutex<PS2Keyboard<layouts::Us104Key, ScancodeSet1>> = Mutex::new(
+    PS2Keyboard::new(ScancodeSet1::new(), layouts::Us104Key, HandleControl::Ignore),
+);
 
 static IDT: Once<InterruptDescriptorTable> = Once::new();
 
@@ -19,9 +36,32 @@ pub fn init() {
                 .set_handler_fn(double_fault)
                 .set_stack_index(crate::gdt::DOUBLE_FAULT_IST);
         }
+        idt[ZAMANLAYICI].set_handler_fn(zamanlayici);
+        idt[KLAVYE].set_handler_fn(klavye);
         idt
     })
     .load();
+
+    unsafe { PICS.lock().initialize() };
+    x86_64::instructions::interrupts::enable();
+}
+
+// Saniyede ~18 kez gelir. Şimdilik yalnızca "aldım" diyoruz.
+extern "x86-interrupt" fn zamanlayici(_frame: InterruptStackFrame) {
+    unsafe { PICS.lock().notify_end_of_interrupt(ZAMANLAYICI) };
+}
+
+// Her tuşa basıp bırakınca gelir. Tuşun kodunu (scancode) 0x60 portundan okuyoruz.
+extern "x86-interrupt" fn klavye(_frame: InterruptStackFrame) {
+    let kod: u8 = unsafe { Port::new(0x60).read() };
+    let mut klavye = KLAVYE_DURUMU.lock();
+    if let Ok(Some(olay)) = klavye.add_byte(kod) {
+        if let Some(DecodedKey::Unicode(c)) = klavye.process_keyevent(olay) {
+            print!("{}", c);
+        }
+    }
+    // PIC'e "bitti" demezsek bir sonraki kesmeyi göndermez.
+    unsafe { PICS.lock().notify_end_of_interrupt(KLAVYE) };
 }
 
 // int3 komutuyla tetiklenir. Hata değil; iş bitince program kaldığı yerden devam eder.

@@ -43,6 +43,15 @@ impl Yazici {
         self.sutun += 1;
     }
 
+    // Backspace: yalnızca bulunduğumuz satırda geri gider.
+    fn geri_sil(&mut self) {
+        if self.sutun > 0 {
+            self.sutun -= 1;
+            let bos = (self.renk as u16) << 8 | b' ' as u16;
+            unsafe { self.hucre(self.satir, self.sutun).write_volatile(bos) };
+        }
+    }
+
     fn yeni_satir(&mut self) {
         self.sutun = 0;
         if self.satir < YUKSEKLIK - 1 {
@@ -70,6 +79,7 @@ impl fmt::Write for Yazici {
         for c in s.chars() {
             match c {
                 ' '..='~' | '\n' => self.bayt_yaz(c as u8),
+                '\u{8}' => self.geri_sil(),
                 // VGA'da olmayan karakterler (ş, ğ, ı...) yerine ■
                 _ => self.bayt_yaz(0xfe),
             }
@@ -81,7 +91,11 @@ impl fmt::Write for Yazici {
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
-    YAZICI.lock().write_fmt(args).unwrap();
+    // Yazarken kesmeleri kapatıyoruz: yoksa klavye kesmesi de yazmaya çalışıp
+    // kilidi sonsuza kadar bekleyebilir.
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        YAZICI.lock().write_fmt(args).unwrap();
+    });
 }
 
 #[macro_export]
