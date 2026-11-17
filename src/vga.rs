@@ -11,6 +11,13 @@ const TAMPON: *mut u16 = 0xb8000 as *mut u16;
 // Siyah zemin üstüne açık camgöbeği
 const VARSAYILAN_RENK: u8 = 0x0b;
 
+// Türkçe harflerin VGA yazı tipindeki yerleri. ç ö ü zaten var (CP437);
+// ı İ ş Ş ğ Ğ yok, onları kullanmadığımız yuvalara kendimiz çiziyoruz.
+const TURKCE: [(char, u8); 12] = [
+    ('ç', 0x87), ('Ç', 0x80), ('ö', 0x94), ('Ö', 0x99), ('ü', 0x81), ('Ü', 0x9a),
+    ('ı', 0x98), ('İ', 0x9b), ('ş', 0x9c), ('Ş', 0x9d), ('ğ', 0x9e), ('Ğ', 0x9f),
+];
+
 pub struct Yazici {
     satir: usize,
     sutun: usize,
@@ -80,11 +87,81 @@ impl fmt::Write for Yazici {
             match c {
                 ' '..='~' | '\n' => self.bayt_yaz(c as u8),
                 '\u{8}' => self.geri_sil(),
-                // VGA'da olmayan karakterler (ş, ğ, ı...) yerine ■
-                _ => self.bayt_yaz(0xfe),
+                _ => match TURKCE.iter().find(|(harf, _)| *harf == c) {
+                    Some(&(_, yuva)) => self.bayt_yaz(yuva),
+                    // Gösteremediğimiz karakterler yerine ■
+                    None => self.bayt_yaz(0xfe),
+                },
             }
         }
         Ok(())
+    }
+}
+
+// Yazı tipi, ekran kartı belleğinin 2. düzleminde (plane 2) durur: her karakter
+// 32 baytlık bir resim, her bayt 8 piksellik bir satır. Normalde oraya erişilemez;
+// birkaç ayarla geçici olarak açıp yeni harfleri çiziyoruz.
+pub fn turkce_harfleri_yukle() {
+    let font = 0xa0000 as *mut u8;
+    let oku = |karakter: u8| {
+        let mut resim = [0u8; 16];
+        for (satir, bayt) in resim.iter_mut().enumerate() {
+            *bayt = unsafe { font.add(karakter as usize * 32 + satir).read_volatile() };
+        }
+        resim
+    };
+    let yaz = |yuva: u8, resim: [u8; 16]| {
+        for (satir, bayt) in resim.iter().enumerate() {
+            unsafe { font.add(yuva as usize * 32 + satir).write_volatile(*bayt) };
+        }
+    };
+
+    unsafe {
+        vga_ayar(0x3c4, 0x02, 0x04); // yalnızca 2. düzleme yaz
+        vga_ayar(0x3c4, 0x04, 0x07); // düz (sıralı) adresleme
+        vga_ayar(0x3ce, 0x04, 0x02); // 2. düzlemden oku
+        vga_ayar(0x3ce, 0x05, 0x00);
+        vga_ayar(0x3ce, 0x06, 0x04); // belleği 0xa0000'a bağla
+    }
+
+    let mut noktasiz_i = oku(b'i');
+    noktasiz_i[..5].fill(0); // noktayı sil
+    yaz(0x98, noktasiz_i);
+
+    let mut i_buyuk = oku(b'I');
+    i_buyuk[0] = 0x18; // nokta ekle
+    yaz(0x9b, i_buyuk);
+
+    for (kaynak, yuva) in [(b's', 0x9c), (b'S', 0x9d)] {
+        let mut s = oku(kaynak);
+        s[12..15].copy_from_slice(&[0x18, 0x0c, 0x38]); // altına çengel
+        yaz(yuva, s);
+    }
+
+    let mut g = oku(b'g');
+    g[2..4].copy_from_slice(&[0x44, 0x38]); // üstüne kısa çizgi (breve)
+    yaz(0x9e, g);
+
+    let mut g_buyuk = oku(b'G');
+    g_buyuk[0..2].copy_from_slice(&[0x42, 0x3c]);
+    yaz(0x9f, g_buyuk);
+
+    unsafe {
+        // Metin modunun normal ayarlarına dön.
+        vga_ayar(0x3c4, 0x02, 0x03);
+        vga_ayar(0x3c4, 0x04, 0x03);
+        vga_ayar(0x3ce, 0x04, 0x00);
+        vga_ayar(0x3ce, 0x05, 0x10);
+        vga_ayar(0x3ce, 0x06, 0x0e);
+    }
+}
+
+// VGA ayarları "indeks portu + veri portu" çiftiyle yazılır.
+unsafe fn vga_ayar(port: u16, indeks: u8, deger: u8) {
+    use x86_64::instructions::port::Port;
+    unsafe {
+        Port::<u8>::new(port).write(indeks);
+        Port::<u8>::new(port + 1).write(deger);
     }
 }
 

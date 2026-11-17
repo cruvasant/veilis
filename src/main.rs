@@ -9,6 +9,7 @@
 
 mod gdt;
 mod interrupts;
+mod klavye;
 mod vga;
 
 use core::panic::PanicInfo;
@@ -18,8 +19,9 @@ use core::panic::PanicInfo;
 // `-> !`: bu fonksiyon asla geri dönmez (dönecek bir yer yok).
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
+    vga::turkce_harfleri_yukle();
     println!("Merhaba, ben Veilis");
-    println!("Surum {}", env!("CARGO_PKG_VERSION"));
+    println!("Sürüm {}", env!("CARGO_PKG_VERSION"));
 
     gdt::init();
     interrupts::init();

@@ -2,12 +2,13 @@
 // durumlarda işlemci, IDT'de (Interrupt Descriptor Table) o hata için
 // kayıtlı fonksiyonu çağırır.
 
-use pc_keyboard::{DecodedKey, HandleControl, PS2Keyboard, ScancodeSet1, layouts};
+use pc_keyboard::{DecodedKey, HandleControl, PS2Keyboard, ScancodeSet1};
 use pic8259::ChainedPics;
 use spin::{Mutex, Once};
 use x86_64::instructions::port::Port;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame};
 
+use crate::klavye::TurkceQ;
 use crate::{print, println};
 
 // Donanım kesmeleri (zamanlayıcı, klavye...) PIC denen yonga üzerinden gelir.
@@ -19,9 +20,8 @@ const KLAVYE: u8 = PIC_1 + 1;
 
 static PICS: Mutex<ChainedPics> = Mutex::new(unsafe { ChainedPics::new(PIC_1, PIC_2) });
 
-// shortcut: yalnızca US düzeni; pc-keyboard'da Türkçe Q yok, kendi düzenimizi yazınca değişecek.
-static KLAVYE_DURUMU: Mutex<PS2Keyboard<layouts::Us104Key, ScancodeSet1>> = Mutex::new(
-    PS2Keyboard::new(ScancodeSet1::new(), layouts::Us104Key, HandleControl::Ignore),
+static KLAVYE_DURUMU: Mutex<PS2Keyboard<TurkceQ, ScancodeSet1>> = Mutex::new(
+    PS2Keyboard::new(ScancodeSet1::new(), TurkceQ, HandleControl::Ignore),
 );
 
 static IDT: Once<InterruptDescriptorTable> = Once::new();

@@ -14,7 +14,8 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 - Panik olduğunda hata mesajını ekrana basma
 - IDT ile işlemci istisnalarını yakalama: breakpoint ve double fault
 - GDT ve TSS ile double fault için ayrı stack, böylece stack taşması da yakalanıyor
-- PIC üzerinden donanım kesmeleri: zamanlayıcı ve klavye (şimdilik US düzeni)
+- PIC üzerinden donanım kesmeleri: zamanlayıcı ve klavye
+- Türkçe Q klavye düzeni (Shift, Caps Lock, AltGr) ve VGA yazı tipine eklenen ı, İ, ş, Ş, ğ, Ğ
 - `bootloader` 0.9 ile BIOS üzerinden önyükleme
 - QEMU sanal makinesinde çalıştırma
 
@@ -62,6 +63,7 @@ cargo bootimage
 | `src/main.rs` | Çekirdeğin kaynak kodu (`_start` başlangıç noktası) |
 | `src/vga.rs` | VGA ekran yazıcısı ve `print!` / `println!` makroları |
 | `src/interrupts.rs` | Kesme tablosu (IDT), istisnalar, zamanlayıcı ve klavye |
+| `src/klavye.rs` | Türkçe Q klavye düzeni |
 | `src/gdt.rs` | GDT ve TSS: istisnalar için yedek stack |
 | `x86_64-veilis.json` | Derleme hedefi: işletim sistemi olmayan x86_64 |
 | `.cargo/config.toml` | `core` kütüphanesini kaynaktan derleme ve `cargo run` ayarları |
