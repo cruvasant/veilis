@@ -13,7 +13,12 @@ pub fn init() {
     IDT.call_once(|| {
         let mut idt = InterruptDescriptorTable::new();
         idt.breakpoint.set_handler_fn(breakpoint);
-        idt.double_fault.set_handler_fn(double_fault);
+        // Stack taşınca da çalışabilsin diye double fault yedek stack'te çalışır.
+        unsafe {
+            idt.double_fault
+                .set_handler_fn(double_fault)
+                .set_stack_index(crate::gdt::DOUBLE_FAULT_IST);
+        }
         idt
     })
     .load();

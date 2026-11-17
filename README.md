@@ -3,7 +3,8 @@
 Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 Çekirdeği (kernel) Rust ile sıfırdan yazılıyor.
 
-> **Durum:** Aşama 3. Çekirdek açılıyor, `println!` ile ekrana yazabiliyor ve işlemci istisnalarını yakalıyor.
+> **Durum:** Aşama 4. Çekirdek açılıyor, `println!` ile ekrana yazabiliyor ve işlemci istisnalarını,
+> stack taşması dahil, yakalıyor.
 > Henüz günlük kullanıma uygun değildir; bir öğrenme ve geliştirme projesidir.
 
 ## Neler var?
@@ -12,6 +13,7 @@ Veilis, gizlilik ve performans odaklı, açık kaynak bir işletim sistemidir.
 - VGA metin tamponu üzerinden ekrana yazı: `print!` / `println!`, satır kaydırma
 - Panik olduğunda hata mesajını ekrana basma
 - IDT ile işlemci istisnalarını yakalama: breakpoint ve double fault
+- GDT ve TSS ile double fault için ayrı stack, böylece stack taşması da yakalanıyor
 - `bootloader` 0.9 ile BIOS üzerinden önyükleme
 - QEMU sanal makinesinde çalıştırma
 
@@ -59,6 +61,7 @@ cargo bootimage
 | `src/main.rs` | Çekirdeğin kaynak kodu (`_start` başlangıç noktası) |
 | `src/vga.rs` | VGA ekran yazıcısı ve `print!` / `println!` makroları |
 | `src/interrupts.rs` | Kesme tablosu (IDT) ve istisna fonksiyonları |
+| `src/gdt.rs` | GDT ve TSS: istisnalar için yedek stack |
 | `x86_64-veilis.json` | Derleme hedefi: işletim sistemi olmayan x86_64 |
 | `.cargo/config.toml` | `core` kütüphanesini kaynaktan derleme ve `cargo run` ayarları |
 | `rust-toolchain.toml` | Kullanılacak Rust sürümü (nightly) |

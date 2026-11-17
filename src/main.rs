@@ -7,6 +7,7 @@
 // İstisna fonksiyonları için özel çağrı biçimi (henüz yalnızca nightly'de).
 #![feature(abi_x86_interrupt)]
 
+mod gdt;
 mod interrupts;
 mod vga;
 
@@ -20,6 +21,7 @@ pub extern "C" fn _start() -> ! {
     println!("Merhaba, ben Veilis");
     println!("Surum {}", env!("CARGO_PKG_VERSION"));
 
+    gdt::init();
     interrupts::init();
 
     // Deneme: breakpoint istisnası tetikle, sonra devam ettiğimizi göster.
